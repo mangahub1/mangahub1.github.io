@@ -1,0 +1,368 @@
+﻿:root {
+  --bg: #0b0d12;
+  --panel: #12151d;
+  --panel-2: #1b1f2a;
+  --text: #f0f3f8;
+  --muted: #9aa3b2;
+  --accent: #e4e8f1;
+  --danger: #ff5d73;
+  --edge: #2a3040;
+  --toolbar-bg: #0f1218;
+  --toolbar-edge: #2b3242;
+  --toolbar-hover: #1d2230;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: #050608;
+  color: var(--text);
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.topbar,
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.65rem 0;
+  background: linear-gradient(90deg, #0d1016 0%, #13161d 100%);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 0.35rem 0 0.3rem;
+  background: #050608;
+}
+
+.pager {
+  border-top: 1px solid var(--edge);
+}
+
+.topbar-track {
+  display: flex;
+  align-items: stretch;
+  margin-left: clamp(0rem, 1vw, 1rem);
+  margin-right: auto;
+  border: 0;
+}
+
+.toolbar-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #050608;
+  border: 0;
+  border-radius: 0;
+  padding: 0.26rem 0.45rem;
+  min-height: 2.55rem;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 1.55rem;
+  background: #313a4c;
+  margin: 0 0.25rem;
+}
+
+.topbar-fill {
+  width: 13.5rem;
+  min-height: 2.55rem;
+  background: #050608;
+}
+
+.icon-btn,
+.direction-btn,
+.zoom-badge {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  border-radius: 0.3rem;
+  font-size: 0.95rem;
+  min-height: 1.9rem;
+  padding: 0.26rem 0.38rem;
+}
+
+button,
+#pageIndicator {
+  border: 1px solid var(--edge);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 0.45rem;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.95rem;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--panel-2);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+#pageIndicator {
+  min-width: 4.2rem;
+  text-align: center;
+  border-color: #2b3140;
+  background: #1b2029;
+  font-weight: 600;
+}
+
+.topbar button {
+  border-color: transparent;
+  background: transparent;
+  color: #f1f4fb;
+}
+
+.topbar button:hover:not(:disabled) {
+  background: var(--toolbar-hover);
+}
+
+.zoom-badge {
+  background: #1d2331;
+  border-color: transparent;
+  min-width: 3.7rem;
+  text-align: center;
+  font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1;
+  padding: 0.28rem 0.55rem;
+}
+
+.direction-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-weight: 600;
+}
+
+.icon-svg {
+  width: 1.14rem;
+  height: 1.14rem;
+  stroke: #d3dae9;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+#zoomOut .icon-svg,
+#zoomIn .icon-svg {
+  width: 1.28rem;
+  height: 1.28rem;
+}
+
+.direction-arrow {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+#directionValue {
+  font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1;
+  position: relative;
+  top: 0;
+}
+
+.bookmark-btn {
+  margin-left: 0;
+  margin-right: 0.7rem;
+}
+
+.bookmark-btn .icon-svg {
+  width: 1.32rem;
+  height: 1.32rem;
+}
+
+.bookmark-svg path {
+  fill: transparent;
+  stroke: #d3dae9;
+}
+
+.bookmark-btn[aria-pressed="true"] .bookmark-svg path {
+  fill: #f4c534;
+  stroke: #f4c534;
+}
+
+.reader-shell {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  padding: 0;
+  gap: 0;
+  background: #24262c;
+  overflow: hidden;
+}
+
+.error-banner {
+  border: 1px solid #5c2933;
+  color: #ffdfe4;
+  background: rgba(111, 31, 48, 0.25);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.canvas-stage {
+  min-height: 0;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: #24262c;
+  padding: 0.45rem 0.5rem 0.55rem;
+  overflow: auto;
+}
+
+.spread {
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.spread-double {
+  grid-template-columns: 1fr 1fr;
+}
+
+.spread-single {
+  grid-template-columns: minmax(280px, 1fr);
+  justify-content: center;
+}
+
+.page-panel {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  height: 100%;
+  padding: 0.2rem;
+}
+
+canvas {
+  max-width: 100%;
+  height: auto;
+  background: #fff;
+  border-radius: 0.25rem;
+}
+
+.panel-fallback {
+  color: var(--muted);
+  text-align: center;
+  max-width: 24ch;
+}
+
+.pager {
+  border-top: 0;
+  border-bottom: 0;
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) auto minmax(120px, 180px);
+  max-width: none;
+  margin: 0;
+  width: 100%;
+  border-radius: 0;
+  border: 0;
+  background: #24262c;
+  padding: 0.45rem 0.75rem 0.55rem;
+}
+
+.pager button {
+  border: 1px solid transparent;
+  background: transparent;
+  color: #e8edf8;
+  border-radius: 0.5rem;
+  font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.pager button:hover:not(:disabled) {
+  border-color: #3a4152;
+  background: #1a202c;
+}
+
+.pager button:focus-visible {
+  border-color: #4b5468;
+  background: #1a202c;
+  outline: 0;
+}
+
+.pager-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pager-arrow-icon {
+  width: 24px;
+  height: 24px;
+  stroke: #e8edf8;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+/* TODO(Figma): replace spacing, typography, and color tokens with final design-system values. */
+/* TODO(Figma): add thumbnail rail and optional chapter drawer zones in layout. */
+
+@media (max-width: 860px) {
+  .topbar {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .topbar-fill {
+    display: none;
+  }
+
+  .spread-double {
+    grid-template-columns: 1fr;
+  }
+
+  .pager {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+}

@@ -1,0 +1,90 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MangaHub PDF Prototype</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-track">
+      <div class="toolbar-pill" aria-label="Reader toolbar">
+        <button id="zoomOut" class="icon-btn" type="button" aria-label="Zoom out">
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="10.5" cy="10.5" r="5.5"></circle>
+            <line x1="7.5" y1="10.5" x2="13.5" y2="10.5"></line>
+            <line x1="15" y1="15" x2="20" y2="20"></line>
+          </svg>
+        </button>
+        <span id="zoomValue" class="zoom-badge" aria-live="polite">100%</span>
+        <button id="zoomIn" class="icon-btn" type="button" aria-label="Zoom in">
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="10.5" cy="10.5" r="5.5"></circle>
+            <line x1="10.5" y1="7.5" x2="10.5" y2="13.5"></line>
+            <line x1="7.5" y1="10.5" x2="13.5" y2="10.5"></line>
+            <line x1="15" y1="15" x2="20" y2="20"></line>
+          </svg>
+        </button>
+
+        <span class="toolbar-divider" aria-hidden="true"></span>
+
+        <button id="directionToggle" class="direction-btn" type="button" aria-label="Toggle reading direction">
+          <svg class="icon-svg direction-arrow" viewBox="0 0 24 24" aria-hidden="true">
+            <line x1="6.5" y1="8.5" x2="17.5" y2="8.5"></line>
+            <polyline points="14.5,5.5 17.5,8.5 14.5,11.5"></polyline>
+            <line x1="17.5" y1="15.5" x2="6.5" y2="15.5"></line>
+            <polyline points="9.5,12.5 6.5,15.5 9.5,18.5"></polyline>
+          </svg>
+          <span id="directionValue">RTL</span>
+        </button>
+      </div>
+      <div class="topbar-fill" aria-hidden="true"></div>
+    </div>
+    <button id="bookmarkToggle" class="icon-btn bookmark-btn" type="button" aria-label="Bookmark page" aria-pressed="false">
+      <svg class="icon-svg bookmark-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M7 4h10v16l-5-3.5L7 20z"></path>
+      </svg>
+    </button>
+  </header>
+
+  <main class="reader-shell">
+    <section id="errorBanner" class="error-banner hidden" role="alert" aria-live="assertive"></section>
+
+    <section id="canvasStage" class="canvas-stage" aria-label="PDF reading area">
+      <div id="spreadContainer" class="spread spread-double">
+        <article class="page-panel" id="leftPanel">
+          <canvas id="leftCanvas"></canvas>
+          <div id="leftFallback" class="panel-fallback hidden"></div>
+        </article>
+        <article class="page-panel" id="rightPanel">
+          <canvas id="rightCanvas"></canvas>
+          <div id="rightFallback" class="panel-fallback hidden"></div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="pager" aria-label="Reading navigation">
+    <button id="leftNav" type="button">
+      <span class="pager-arrow" aria-hidden="true">
+        <svg class="pager-arrow-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <polyline points="14,6 8,12 14,18"></polyline>
+        </svg>
+      </span>
+      <span class="pager-label">Prev</span>
+    </button>
+    <div id="pageIndicator" aria-live="polite">0 / 0</div>
+    <button id="rightNav" type="button">
+      <span class="pager-label">Next</span>
+      <span class="pager-arrow" aria-hidden="true">
+        <svg class="pager-arrow-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <polyline points="10,6 16,12 10,18"></polyline>
+        </svg>
+      </span>
+    </button>
+  </footer>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
