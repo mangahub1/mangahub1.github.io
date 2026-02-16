@@ -248,18 +248,19 @@ button:disabled {
 .spread {
   height: 100%;
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
-  gap: 0.75rem;
-  align-items: stretch;
+  align-items: center;
+  justify-items: stretch;
+  gap: 30px;
+  min-height: 0;
 }
 
 .spread-double {
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .spread-single {
-  grid-template-columns: minmax(280px, 1fr);
-  justify-content: center;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
 }
 
 .page-panel {
@@ -270,7 +271,23 @@ button:disabled {
   place-items: center;
   min-height: 0;
   height: 100%;
-  padding: 0.2rem;
+  padding: 0;
+}
+
+.spread-double #leftPanel {
+  place-items: center end;
+}
+
+.spread-double #rightPanel {
+  place-items: center start;
+}
+
+.spread-double #leftCanvas {
+  justify-self: end;
+}
+
+.spread-double #rightCanvas {
+  justify-self: start;
 }
 
 canvas {
@@ -315,6 +332,7 @@ canvas {
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
+  white-space: nowrap;
 }
 
 .pager button:hover:not(:disabled) {
@@ -344,6 +362,18 @@ canvas {
   fill: none;
 }
 
+#leftNav {
+  justify-self: start;
+}
+
+#pageIndicator {
+  justify-self: center;
+}
+
+#rightNav {
+  justify-self: end;
+}
+
 /* TODO(Figma): replace spacing, typography, and color tokens with final design-system values. */
 /* TODO(Figma): add thumbnail rail and optional chapter drawer zones in layout. */
 
@@ -362,7 +392,36 @@ canvas {
   }
 
   .pager {
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.45rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  #leftNav {
+    width: auto !important;
+    min-width: 0 !important;
+    flex: 0 1 auto;
+  }
+
+  #pageIndicator {
+    width: auto !important;
+    min-width: 0 !important;
+    flex: 0 0 auto;
+    margin: 0 auto;
+  }
+
+  #rightNav {
+    width: auto !important;
+    min-width: 0 !important;
+    flex: 0 1 auto;
+  }
+
+  .pager button {
+    width: auto !important;
   }
 }
