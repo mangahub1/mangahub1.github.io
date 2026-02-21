@@ -1,4 +1,4 @@
-﻿import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
+import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
@@ -251,7 +251,7 @@ function updateDirectionalLabels() {
   if (elements.directionValue) {
     elements.directionValue.textContent = state.direction.toUpperCase();
   } else if (elements.directionToggle) {
-    elements.directionToggle.textContent = `↔ ${state.direction.toUpperCase()}`;
+    elements.directionToggle.textContent = `? ${state.direction.toUpperCase()}`;
   }
 
   elements.directionToggle?.setAttribute(
@@ -411,7 +411,7 @@ async function renderSpread(index) {
   elements.spread.style.display = "flex";
   elements.spread.style.alignItems = "center";
   elements.spread.style.justifyContent = "center";
-  elements.spread.style.gap = isSingle ? "0px" : "30px";
+  elements.spread.style.gap = "0px";
 
   elements.leftPanel.style.display = "flex";
   elements.leftPanel.style.alignItems = "center";

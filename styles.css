@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   --bg: #0b0d12;
   --panel: #12151d;
   --panel-2: #1b1f2a;
@@ -250,7 +250,7 @@ button:disabled {
   display: grid;
   align-items: center;
   justify-items: stretch;
-  gap: 30px;
+  gap: 0px;
   min-height: 0;
 }
 
