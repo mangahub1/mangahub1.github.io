@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BluPetal Manga</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon.png" />
+  <link rel="stylesheet" href="./manga.css" />
+</head>
+<body>
+  <header class="manga-topbar">
+    <div class="topbar-left">
+      <a href="./library.html" class="brand-link" aria-label="Back to library">
+        <img src="./assets/logo-header.png" alt="BluPetal" />
+      </a>
+      <nav class="topbar-nav" aria-label="Primary">
+        <a href="./library.html">Manga</a>
+        <a href="#">News</a>
+        <a href="#">Shop</a>
+      </nav>
+    </div>
+    <div class="topbar-right">
+      <button type="button" class="library-icon-btn" aria-label="Search">
+        <svg class="library-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="6.5"></circle>
+          <line x1="16" y1="16" x2="21" y2="21"></line>
+        </svg>
+      </button>
+      <button type="button" class="library-icon-btn" aria-label="Account settings">
+        <svg class="library-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="8.1" r="3.1"></circle>
+          <path d="M5.4 19.2a6.6 6.6 0 0 1 13.2 0"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="mangaPage" class="manga-page" aria-live="polite">
+    <section id="mangaError" class="manga-error hidden" role="alert"></section>
+
+    <section id="mangaLayout" class="manga-layout hidden">
+      <aside class="manga-left">
+        <img id="mangaCover" class="manga-cover" src="" alt="" />
+        <div class="manga-actions">
+          <a class="back-library-btn" href="./library.html">Back to Library</a>
+          <a id="startReadingBtn" class="start-reading-btn" href="./library.html">Start Reading</a>
+        </div>
+
+        <section class="meta-card">
+          <div class="meta-row">
+            <h3>Author</h3>
+            <p id="metaAuthor">Unknown</p>
+          </div>
+          <div class="meta-row">
+            <h3>Genre</h3>
+            <div id="metaGenres" class="genre-chips"></div>
+          </div>
+          <div class="meta-row">
+            <h3>Age Rating</h3>
+            <p id="metaAge">18+</p>
+          </div>
+          <div class="meta-row">
+            <h3>Status</h3>
+            <p id="metaStatus">Ongoing</p>
+          </div>
+          <div class="meta-row">
+            <h3>Rating</h3>
+            <p id="metaRating">4.8</p>
+          </div>
+        </section>
+      </aside>
+
+      <section class="manga-right">
+        <h1 id="mangaTitle" class="manga-title">Manga Title</h1>
+        <div id="mangaDescription" class="manga-description"></div>
+
+        <div class="volume-head">
+          <h2>Volumes</h2>
+        </div>
+        <div id="volumeList" class="volume-list"></div>
+      </section>
+    </section>
+  </main>
+
+  <script type="module" src="./manga.js"></script>
+</body>
+</html>

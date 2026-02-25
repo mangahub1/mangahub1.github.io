@@ -1,0 +1,188 @@
+:root {
+  --bg: #000;
+  --text: #f5f8ff;
+  --muted: #9da3ae;
+  --line: #2b2e36;
+  --card-edge: #dadce0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", Roboto, Arial, sans-serif;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.login-topbar {
+  border-bottom: 1px solid #151820;
+  background: #03050a;
+  padding: 0.95rem 1.2rem;
+  display: flex;
+  justify-content: center;
+}
+
+.topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  background: #ffffff;
+  border-radius: 9px;
+  padding: 0.25rem 0.45rem;
+}
+
+.topbar-brand img {
+  width: 156px;
+  height: auto;
+  display: block;
+}
+
+.login-shell {
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+}
+
+.google-card {
+  width: min(420px, 100%);
+  background: #ffffff;
+  color: #202124;
+  border: 1px solid var(--card-edge);
+  border-radius: 14px;
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.45);
+  padding: 1rem 1rem 0.6rem;
+}
+
+.google-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.8rem;
+  color: #3c4043;
+  font-size: 0.98rem;
+}
+
+.google-g {
+  font-weight: 700;
+  font-size: 1.35rem;
+  line-height: 1;
+  background: conic-gradient(#4285f4 0 90deg, #34a853 90deg 180deg, #fbbc05 180deg 270deg, #ea4335 270deg 360deg);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.google-card h1 {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 400;
+}
+
+.google-card p {
+  margin: 0.35rem 0 1rem;
+  color: #5f6368;
+  font-size: 1rem;
+}
+
+.account-row {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--card-edge);
+  background: transparent;
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 0.72rem;
+  padding: 0.76rem 0.2rem;
+  text-align: left;
+}
+
+.account-row:hover:not(.secondary) {
+  background: #f7f9fb;
+}
+
+.account-row.secondary {
+  border-bottom: 1px solid var(--card-edge);
+  cursor: not-allowed;
+  color: #7b7f84;
+}
+
+.avatar {
+  width: 1.95rem;
+  height: 1.95rem;
+  border-radius: 999px;
+  background: #4a6cf0;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.avatar.ghost {
+  background: #e8eaed;
+  color: #5f6368;
+}
+
+.account-meta {
+  display: grid;
+}
+
+.name {
+  font-size: 1rem;
+}
+
+.email {
+  font-size: 0.92rem;
+  color: #5f6368;
+}
+
+.login-footer {
+  padding: 1.2rem 1rem 1.45rem;
+  text-align: center;
+}
+
+.footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.footer-links a {
+  text-decoration: none;
+  color: #9ca2b2;
+  font-size: 0.84rem;
+}
+
+.login-footer p {
+  margin: 0.75rem 0 0;
+  color: #c8ceda;
+  font-size: 0.86rem;
+}
+
+@media (max-width: 650px) {
+  .topbar-brand img {
+    width: 136px;
+  }
+
+  .google-card {
+    padding: 0.85rem 0.85rem 0.5rem;
+  }
+
+  .google-card h1 {
+    font-size: 1.7rem;
+  }
+}

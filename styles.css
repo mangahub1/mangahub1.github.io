@@ -4,11 +4,9 @@
   --panel-2: #1b1f2a;
   --text: #f0f3f8;
   --muted: #9aa3b2;
-  --accent: #e4e8f1;
+  --accent: #ff8b2f;
   --danger: #ff5d73;
   --edge: #2a3040;
-  --toolbar-bg: #0f1218;
-  --toolbar-edge: #2b3242;
   --toolbar-hover: #1d2230;
 }
 
@@ -19,27 +17,347 @@
 html,
 body {
   height: 100%;
-  overflow: hidden;
 }
 
 body {
   margin: 0;
-  height: 100vh;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
   background: #050608;
   color: var(--text);
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 }
 
-.topbar,
-.pager {
+.library-active {
+  overflow-y: auto;
+}
+
+.reader-active {
+  overflow: hidden;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.library-view {
+  min-height: 100vh;
+  background: #ffffff;
+  color: #18191f;
+}
+
+.library-topbar {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: 1rem;
-  padding: 0.65rem 0;
-  background: linear-gradient(90deg, #0d1016 0%, #13161d 100%);
+  padding: 0.78rem clamp(1rem, 3vw, 2rem);
+  border-bottom: 1px solid #e8e8eb;
+  background: #ffffff;
+}
+
+.library-nav-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.15rem;
+}
+
+.library-brand {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  line-height: 0;
+}
+
+.library-brand img {
+  display: block;
+  width: 132px;
+  height: auto;
+}
+
+.library-nav-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.library-nav-links a {
+  text-decoration: none;
+  color: #24252c;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.library-nav-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  position: relative;
+}
+
+.library-icon-btn {
+  border: 0;
+  background: transparent;
+  color: #35353d;
+  padding: 0.35rem 0.6rem;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.settings-menu {
+  position: relative;
+}
+
+.settings-menu > summary {
+  list-style: none;
+}
+
+.settings-menu > summary::marker {
+  content: "";
+}
+
+.settings-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+}
+
+.settings-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.45rem);
+  min-width: 200px;
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(140, 149, 159, 0.2);
+  padding: 0.4rem 0.38rem;
+  z-index: 30;
+}
+
+.settings-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  color: #24292f;
+  font-size: 0.84rem;
+  font-weight: 400;
+  border-radius: 6px;
+  padding: 0.47rem 0.56rem;
+  line-height: 1.2;
+}
+
+.settings-item:hover {
+  background: #f6f8fa;
+  color: #24292f;
+}
+
+.settings-item-icon {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  color: #57606a;
+  flex: 0 0 auto;
+}
+
+.settings-item.signout {
+  margin-top: 0.34rem;
+  border-top: 1px solid #d8dee4;
+  padding-top: 0.6rem;
+  color: #cf222e;
+}
+
+.settings-item.signout:hover {
+  background: #fff2f3;
+  color: #cf222e;
+}
+
+.settings-item.signout .settings-item-icon {
+  color: #cf222e;
+}
+
+.library-icon-svg {
+  width: 18px;
+  height: 18px;
+  stroke: #22242a;
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  display: block;
+}
+
+.library-icon-btn:hover,
+.library-icon-btn:focus-visible,
+.library-section-action:hover,
+.library-section-action:focus-visible {
+  border-color: transparent;
+}
+
+.library-topbar .library-icon-btn:hover:not(:disabled),
+.library-topbar .library-icon-btn:focus-visible {
+  background: #f1f3f6;
+  color: #1f232b;
+  border-radius: 999px;
+}
+
+.library-shell .library-section-action:hover:not(:disabled),
+.library-shell .library-section-action:focus-visible {
+  background: #fff1f8;
+  color: #d61e85;
+  border-radius: 999px;
+  padding-left: 0.45rem;
+  padding-right: 0.45rem;
+}
+
+.library-shell {
+  padding: 1.05rem clamp(1rem, 3vw, 2rem) 2.2rem;
+  max-width: 1260px;
+  margin: 0 auto;
+}
+
+.library-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.45rem;
+}
+
+.library-section {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.library-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.library-section-title {
+  margin: 0;
+  font-size: 1.95rem;
+  font-weight: 500;
+  color: #17181d;
+}
+
+.library-section-action {
+  border: 0;
+  background: transparent;
+  color: #f2419e;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.2rem 0;
+}
+
+.library-row {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  padding-bottom: 0.15rem;
+  gap: 0.8rem;
+}
+
+.manga-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  color: #1c1d22;
+  text-align: left;
+  display: grid;
+  gap: 0.22rem;
+  cursor: pointer;
+  transition: transform 140ms ease;
+  flex: 0 0 144px;
+  width: 144px;
+}
+
+.manga-card:hover {
+  transform: translateY(-2px);
+}
+
+.manga-card:focus-visible {
+  outline: 2px solid #f2419e;
+  outline-offset: 2px;
+}
+
+.library-shell .manga-card:hover:not(:disabled),
+.library-shell .manga-card:focus-visible {
+  background: #f7f8fb;
+  border-radius: 0.55rem;
+}
+
+.manga-thumb {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 0.6rem;
+  background: #eceef2;
+  object-fit: cover;
+  border: 1px solid #e0e2e7;
+}
+
+.manga-title {
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #1a1b1f;
+  margin-top: 0.2rem;
+}
+
+.manga-meta {
+  font-size: 0.62rem;
+  color: #7c8088;
+  line-height: 1.2;
+}
+
+.library-empty {
+  margin: 0;
+  color: #4e525b;
+}
+
+.library-footer {
+  border-top: 1px solid #ededf0;
+  margin-top: 0.4rem;
+  padding: 0.95rem clamp(1rem, 3vw, 2rem);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.library-footer-links {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.library-footer-links a,
+.library-footer-copy {
+  color: #989ca5;
+  text-decoration: none;
+  font-size: 0.62rem;
+}
+
+.error-banner {
+  border: 1px solid #5c2933;
+  color: #ffdfe4;
+  background: rgba(111, 31, 48, 0.25);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.reader-view {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
 }
 
 .topbar {
@@ -51,16 +369,47 @@ body {
   background: #050608;
 }
 
-.pager {
-  border-top: 1px solid var(--edge);
-}
-
 .topbar-track {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   margin-left: clamp(0rem, 1vw, 1rem);
   margin-right: auto;
-  border: 0;
+}
+
+.library-link-btn {
+  border: 1px solid #2f3545;
+  color: #f5f8ff;
+  text-decoration: none;
+  border-radius: 0.45rem;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-right: 0.45rem;
+  background: #171c27;
+}
+
+.library-link-btn:hover {
+  border-color: #ff9f55;
+}
+
+.library-link-btn.icon-only {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+}
+
+.back-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .toolbar-pill {
@@ -68,8 +417,6 @@ body {
   align-items: center;
   gap: 0.4rem;
   background: #050608;
-  border: 0;
-  border-radius: 0;
   padding: 0.26rem 0.45rem;
   min-height: 2.55rem;
 }
@@ -84,7 +431,6 @@ body {
 .topbar-fill {
   width: 13.5rem;
   min-height: 2.55rem;
-  background: #050608;
 }
 
 .icon-btn,
@@ -142,14 +488,10 @@ button:disabled {
 
 .zoom-badge {
   background: #1d2331;
-  border-color: transparent;
   min-width: 3.7rem;
   text-align: center;
-  font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
-    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0;
   line-height: 1;
   padding: 0.28rem 0.55rem;
 }
@@ -183,18 +525,12 @@ button:disabled {
 }
 
 #directionValue {
-  font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
-    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0;
   line-height: 1;
-  position: relative;
-  top: 0;
 }
 
 .bookmark-btn {
-  margin-left: 0;
   margin-right: 0.7rem;
 }
 
@@ -217,29 +553,13 @@ button:disabled {
   min-height: 0;
   display: grid;
   grid-template-rows: auto 1fr;
-  padding: 0;
-  gap: 0;
   background: #24262c;
   overflow: hidden;
-}
-
-.error-banner {
-  border: 1px solid #5c2933;
-  color: #ffdfe4;
-  background: rgba(111, 31, 48, 0.25);
-  border-radius: 0.5rem;
-  padding: 0.6rem 0.75rem;
-}
-
-.hidden {
-  display: none !important;
 }
 
 .canvas-stage {
   min-height: 0;
   height: 100%;
-  border: 0;
-  border-radius: 0;
   background: #24262c;
   padding: 0.45rem 0.5rem 0.55rem;
   overflow: auto;
@@ -250,7 +570,7 @@ button:disabled {
   display: grid;
   align-items: center;
   justify-items: stretch;
-  gap: 0px;
+  gap: 0;
   min-height: 0;
 }
 
@@ -266,7 +586,6 @@ button:disabled {
 .page-panel {
   background: transparent;
   border: 0;
-  border-radius: 0;
   display: grid;
   place-items: center;
   min-height: 0;
@@ -304,15 +623,9 @@ canvas {
 }
 
 .pager {
-  border-top: 0;
-  border-bottom: 0;
   display: grid;
   grid-template-columns: minmax(120px, 180px) auto minmax(120px, 180px);
-  max-width: none;
-  margin: 0;
   width: 100%;
-  border-radius: 0;
-  border: 0;
   background: #24262c;
   padding: 0.45rem 0.75rem 0.55rem;
 }
@@ -322,11 +635,8 @@ canvas {
   background: transparent;
   color: #e8edf8;
   border-radius: 0.5rem;
-  font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
-    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0;
   line-height: 1;
   display: inline-flex;
   align-items: center;
@@ -374,10 +684,33 @@ canvas {
   justify-self: end;
 }
 
-/* TODO(Figma): replace spacing, typography, and color tokens with final design-system values. */
-/* TODO(Figma): add thumbnail rail and optional chapter drawer zones in layout. */
-
 @media (max-width: 860px) {
+  .library-nav-left {
+    gap: 0.65rem;
+  }
+
+  .library-nav-links {
+    display: none;
+  }
+
+  .library-section-title {
+    font-size: 1.45rem;
+  }
+
+  .library-row {
+    gap: 0.65rem;
+  }
+
+  .manga-card {
+    flex-basis: 124px;
+    width: 124px;
+  }
+
+  .library-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .topbar {
     flex-wrap: wrap;
     justify-content: flex-start;
@@ -402,7 +735,8 @@ canvas {
     padding-right: 0.5rem;
   }
 
-  #leftNav {
+  #leftNav,
+  #rightNav {
     width: auto !important;
     min-width: 0 !important;
     flex: 0 1 auto;
@@ -413,12 +747,6 @@ canvas {
     min-width: 0 !important;
     flex: 0 0 auto;
     margin: 0 auto;
-  }
-
-  #rightNav {
-    width: auto !important;
-    min-width: 0 !important;
-    flex: 0 1 auto;
   }
 
   .pager button {

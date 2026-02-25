@@ -1,0 +1,154 @@
+{
+  "sections": [
+    { "id": "trending", "title": "Trending Manga This Week" },
+    { "id": "popular-boys-love", "title": "Popular Boys' Love Manga" },
+    { "id": "romance-picks", "title": "Romance Picks" },
+    { "id": "drama-picks", "title": "Drama Spotlight" }
+  ],
+  "manga": [
+    {
+      "id": "you-havent-seen-the-best-of-me-vol-1",
+      "title": "You Haven't Seen the Best of Me Vol. 1",
+      "pdf": "./pdfs/youhaventseenthebestofme_vol1.pdf",
+      "thumbnail": "./assets/thumbnails/youhaventseenthebestofme_vol1.png",
+      "author": "BluPetal Studio",
+      "genres": ["Boys' Love", "Drama"],
+      "ageRating": "18+",
+      "status": "Ongoing",
+      "rating": "4.8",
+      "ratingCount": "1,234",
+      "groups": ["trending", "drama-picks"],
+      "description": "Volume one.",
+      "longDescription": [
+        "A fresh romance drama where two rivals discover an unexpected emotional connection as their worlds collide.",
+        "As trust grows, they navigate jealousy, friendship, and the pressure of choosing love over fear."
+      ],
+      "volumes": [
+        { "id": "v1", "title": "Volume 1", "date": "October 1, 2025", "pdf": "./pdfs/youhaventseenthebestofme_vol1.pdf" },
+        { "id": "v2", "title": "Volume 2", "date": "November 5, 2025", "pdf": "./pdfs/youhaventseenthebestofme_vol1.pdf" },
+        { "id": "v3", "title": "Volume 3", "date": "December 3, 2025", "pdf": "./pdfs/youhaventseenthebestofme_vol1.pdf" }
+      ]
+    },
+    {
+      "id": "tokyo-boys-cinema-yaoi-issue-1",
+      "title": "Tokyo Boys Cinema Yaoi Manga Issue 1",
+      "pdf": "./pdfs/tokyoboyscinemayaoimangaissue_issue1.pdf",
+      "thumbnail": "./assets/thumbnails/tokyoboyscinema.png",
+      "author": "Kenji Morita",
+      "genres": ["Yaoi", "Romance"],
+      "ageRating": "18+",
+      "status": "Ongoing",
+      "rating": "4.7",
+      "ratingCount": "980",
+      "groups": ["trending", "romance-picks"],
+      "description": "Issue one.",
+      "longDescription": [
+        "Set under city lights and film sets, this story follows two actors whose on-screen chemistry starts to spill into real life.",
+        "Between auditions and late-night rehearsals, they must decide whether to protect their careers or risk everything for love."
+      ],
+      "volumes": [
+        { "id": "v1", "title": "Volume 1", "date": "October 1, 2025", "pdf": "./pdfs/tokyoboyscinemayaoimangaissue_issue1.pdf" },
+        { "id": "v2", "title": "Volume 2", "date": "November 5, 2025", "pdf": "./pdfs/tokyoboyscinemayaoimangaissue_issue1.pdf" },
+        { "id": "v3", "title": "Volume 3", "date": "December 3, 2025", "pdf": "./pdfs/tokyoboyscinemayaoimangaissue_issue1.pdf" }
+      ]
+    },
+    {
+      "id": "ten-count",
+      "title": "Ten Count",
+      "pdf": "./pdfs/tokyoboyscinemayaoimangaissue_issue1.pdf",
+      "thumbnail": "./assets/thumbnails/ten-count.png",
+      "author": "Rihito Takarai",
+      "genres": ["Boys' Love", "Drama"],
+      "ageRating": "18+",
+      "status": "Ongoing",
+      "rating": "4.9",
+      "ratingCount": "2,087",
+      "groups": ["trending", "popular-boys-love", "drama-picks"],
+      "description": "Mock item."
+    },
+    {
+      "id": "punch-drunk-love",
+      "title": "Punch Drunk Love",
+      "pdf": "./pdfs/tokyoboyscinemayaoimangaissue_issue1.pdf",
+      "thumbnail": "./assets/thumbnails/punch-drunk-love.png",
+      "author": "Mitsuru Sato",
+      "genres": ["Yaoi", "Romance"],
+      "ageRating": "18+",
+      "status": "Ongoing",
+      "rating": "4.6",
+      "ratingCount": "1,102",
+      "groups": ["trending", "popular-boys-love", "romance-picks"],
+      "description": "Mock item."
+    },
+    {
+      "id": "i-hear-the-sunspot",
+      "title": "I Hear The Sunspot",
+      "pdf": "./pdfs/youhaventseenthebestofme_vol1.pdf",
+      "thumbnail": "./assets/thumbnails/i-hear-the-sunspot.png",
+      "author": "Yuki Fumino",
+      "genres": ["Boys' Love", "Romance"],
+      "ageRating": "16+",
+      "status": "Ongoing",
+      "rating": "4.8",
+      "ratingCount": "1,846",
+      "groups": ["trending", "romance-picks"],
+      "description": "Mock item."
+    },
+    {
+      "id": "happy-crappy-life",
+      "title": "Happy Crappy Life",
+      "pdf": "./pdfs/youhaventseenthebestofme_vol1.pdf",
+      "thumbnail": "./assets/thumbnails/happy-crappy-life.png",
+      "author": "Harada",
+      "genres": ["Yaoi", "Comedy"],
+      "ageRating": "18+",
+      "status": "Ongoing",
+      "rating": "4.5",
+      "ratingCount": "774",
+      "groups": ["trending", "popular-boys-love"],
+      "description": "Mock item."
+    },
+    {
+      "id": "depth-of-field",
+      "title": "Depth Of Field",
+      "pdf": "./pdfs/youhaventseenthebestofme_vol1.pdf",
+      "thumbnail": "./assets/thumbnails/depth-of-field.png",
+      "author": "Enjo",
+      "genres": ["Boys' Love", "Drama"],
+      "ageRating": "17+",
+      "status": "Ongoing",
+      "rating": "4.7",
+      "ratingCount": "1,309",
+      "groups": ["popular-boys-love", "drama-picks"],
+      "description": "Mock item."
+    },
+    {
+      "id": "lullaby-of-the-dawn",
+      "title": "Lullaby of the Dawn",
+      "pdf": "./pdfs/tokyoboyscinemayaoimangaissue_issue1.pdf",
+      "thumbnail": "./assets/thumbnails/lullaby-of-the-dawn.png",
+      "author": "Ichika Yuno",
+      "genres": ["Boys' Love", "Fantasy"],
+      "ageRating": "18+",
+      "status": "Ongoing",
+      "rating": "4.9",
+      "ratingCount": "2,522",
+      "groups": ["popular-boys-love", "drama-picks", "romance-picks"],
+      "description": "Mock item."
+    },
+    {
+      "id": "yarichin-bitch-club",
+      "title": "Yarichin Bitch Club",
+      "pdf": "./pdfs/tokyoboyscinemayaoimangaissue_issue1.pdf",
+      "thumbnail": "./assets/thumbnails/yarichin-bitch-club.png",
+      "author": "Ogeretsu Tanaka",
+      "genres": ["Boys' Love", "Comedy"],
+      "ageRating": "18+",
+      "status": "Ongoing",
+      "rating": "4.6",
+      "ratingCount": "1,578",
+      "groups": ["popular-boys-love", "romance-picks"],
+      "description": "Mock item."
+    }
+  ]
+}
