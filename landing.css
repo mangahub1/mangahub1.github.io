@@ -1,0 +1,162 @@
+:root {
+  --bg: #04050a;
+  --text: #f5f7fd;
+  --muted: #c5cedf;
+  --accent: #1aa3d9;
+  --accent-2: #ef0f9a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Avenir Next", "Segoe UI", Tahoma, sans-serif;
+  overflow: hidden;
+}
+
+.manga-wall {
+  position: fixed;
+  inset: -4% -3%;
+  z-index: 0;
+  transform: skewY(-8deg);
+  transform-origin: center;
+}
+
+.poster {
+  position: absolute;
+  width: 220px;
+  aspect-ratio: 3 / 4;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+}
+
+.p1 { left: 1%; top: 22%; background-image: url("./assets/thumbnails/ten-count.png"); transform: rotate(-8deg); }
+.p2 { left: 14%; top: 8%; background-image: url("./assets/thumbnails/punch-drunk-love.png"); transform: rotate(-8deg); }
+.p3 { left: 29%; top: 18%; background-image: url("./assets/thumbnails/i-hear-the-sunspot.png"); transform: rotate(-8deg); }
+.p4 { left: 43%; top: 7%; background-image: url("./assets/thumbnails/happy-crappy-life.png"); transform: rotate(-8deg); }
+.p5 { left: 57%; top: 18%; background-image: url("./assets/thumbnails/depth-of-field.png"); transform: rotate(-8deg); }
+.p6 { left: 70%; top: 7%; background-image: url("./assets/thumbnails/lullaby-of-the-dawn.png"); transform: rotate(-8deg); }
+.p7 { left: 83%; top: 22%; background-image: url("./assets/thumbnails/yarichin-bitch-club.png"); transform: rotate(-8deg); }
+.p8 { left: 8%; top: 52%; background-image: url("./assets/thumbnails/tokyoboyscinema.png"); transform: rotate(-8deg); }
+.p9 { left: 38%; top: 50%; background-image: url("./assets/thumbnails/youhaventseenthebestofme_vol1.png"); transform: rotate(-8deg); }
+.p10 { left: 66%; top: 54%; background-image: url("./assets/thumbnails/ten-count.png"); transform: rotate(-8deg); }
+
+.wall-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(1100px 600px at 24% 34%, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.86)),
+    linear-gradient(180deg, rgba(3, 5, 12, 0.36), rgba(3, 5, 12, 0.92));
+}
+
+.topbar,
+.landing-layout {
+  position: relative;
+  z-index: 2;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.95rem clamp(1rem, 3vw, 2.6rem);
+}
+
+.topbar-logo-shell {
+  background: rgba(255, 255, 255, 0.93);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 12px;
+  padding: 0.34rem 0.6rem;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+}
+
+.topbar-logo {
+  width: clamp(120px, 14vw, 190px);
+  height: auto;
+  display: block;
+}
+
+.login-btn {
+  text-decoration: none;
+  color: #f9fbff;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(9, 12, 20, 0.45);
+  padding: 0.58rem 1.15rem;
+  border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.landing-layout {
+  min-height: calc(100vh - 4.8rem);
+  display: grid;
+  align-items: center;
+  padding: 1rem clamp(1rem, 5vw, 4.2rem) 2rem;
+}
+
+.intro-copy {
+  max-width: 900px;
+}
+
+.hero-title {
+  margin: 0;
+  font-size: clamp(2.3rem, 7vw, 6rem);
+  line-height: 0.96;
+  font-weight: 800;
+  text-wrap: balance;
+}
+
+.hero-copy {
+  margin: 1.35rem 0 0;
+  max-width: 45rem;
+  font-size: clamp(1rem, 2.2vw, 1.7rem);
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.hero-cta {
+  margin-top: 1.55rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #031019;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+  border-radius: 999px;
+  padding: 0.88rem 1.45rem;
+}
+
+@media (max-width: 900px) {
+  body {
+    overflow: auto;
+  }
+
+  .manga-wall {
+    inset: -2% -7%;
+    transform: skewY(-5deg);
+  }
+
+  .poster {
+    width: 150px;
+  }
+
+  .landing-layout {
+    min-height: auto;
+    padding-bottom: 3rem;
+  }
+}
