@@ -15,13 +15,12 @@
 body {
   margin: 0;
   color: var(--text);
-  background: #d9d9d9;
+  background: var(--page-bg);
   font-family: "Avenir Next", "Segoe UI", Tahoma, sans-serif;
 }
 
 .topbar {
-  width: min(1060px, 100%);
-  margin: 0 auto;
+  width: 100%;
   height: 40px;
   padding: 0 18px;
   background: #fff;
@@ -53,8 +52,7 @@ body {
 }
 
 .page {
-  width: min(1060px, 100%);
-  margin: 0 auto;
+  width: 100%;
   background: var(--page-bg);
 }
 
@@ -171,8 +169,7 @@ body {
 }
 
 .footer {
-  width: min(1060px, 100%);
-  margin: 0 auto;
+  width: 100%;
   background: #fff;
   padding: 15px clamp(10px, 4vw, 34px);
   display: flex;
