@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sign in with Google</title>
+  <title>Sign in to BluPetal</title>
   <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon.png" />
   <link rel="stylesheet" href="./login.css" />
 </head>
@@ -18,17 +18,17 @@
     <section class="google-card" aria-label="Google account chooser">
       <div class="google-header">
         <span class="google-g" aria-hidden="true">G</span>
-        <span>Sign in with Google</span>
+        <span>Sign in to BluPetal</span>
       </div>
 
-      <h1>Choose an account</h1>
-      <p>to continue to BluPetal</p>
+      <h1>Continue with Google</h1>
+      <p>You will be redirected to Cognito Hosted UI for authentication.</p>
 
-      <a class="account-row" href="./library.html">
-        <span class="avatar" aria-hidden="true">B</span>
+      <a class="account-row" href="#" id="cognitoLoginLink">
+        <span class="avatar" aria-hidden="true">G</span>
         <span class="account-meta">
-          <span class="name">Bob Smith</span>
-          <span class="email">bobsmith@gmail.com</span>
+          <span class="name">Sign in with your Google account</span>
+          <span class="email">Use your own account</span>
         </span>
       </a>
 
@@ -49,6 +49,8 @@
     </div>
     <p>Protected by reCAPTCHA. Google Privacy Policy and Terms of Service apply.</p>
   </footer>
+
+  <script type="module" src="./login.js"></script>
 </body>
 </html>
 

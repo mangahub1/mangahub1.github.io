@@ -28,7 +28,24 @@ Flow:
    `http://localhost:5173/library.html`
 
 Notes:
-- Auth is mocked for now; `Log In` -> `login.html` -> `library.html`.
 - Reader state is shareable via `library.html?manga=<id>`.
 - Workflow is now: Library tile -> `manga.html?manga=<id>` -> select volume -> reader.
+
+Cognito + authorization flow:
+- Update `auth-config.js` with:
+  - Cognito domain
+  - app client ID
+  - `appAuthzConfig.validateUserEndpoint` (API Gateway route)
+- Set callback URL in Cognito:
+  - `http://localhost:5173/auth/callback.html`
+  - `https://d1wjiajokat0ou.cloudfront.net/auth/callback.html`
+- Landing page login buttons now start Cognito Hosted UI with PKCE directly.
+- Callback page exchanges code for tokens, calls API authorization, and only redirects to `library.html` when allowed.
+- Authorization behavior:
+  - first login with unknown user creates DynamoDB record as pending (`status=-1`)
+  - pending users see a review message
+  - approved users (`status=1`) enter library
+  - disabled users (`status=0`) are blocked
+- `library.html` enforces auth guard and redirects home if session/token is missing or invalid.
+- Lambda starter for user permission checks is in `api/validate_user_lambda.py`.
 

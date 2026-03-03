@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BluPetal Validation</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon.png" />
+  <link rel="stylesheet" href="./callback.css" />
+</head>
+<body>
+  <main class="auth-shell" aria-live="polite">
+    <div class="auth-card">
+      <div class="logo-orbit" aria-hidden="true">
+        <img src="../assets/logo-home.png" alt="" />
+      </div>
+      <h1 id="status">Validating sign in</h1>
+      <p id="message">Please wait while we verify your BluPetal access.</p>
+      <div id="actions" class="actions hidden">
+        <button id="continueBtn" type="button" class="action-btn">Continue to Library</button>
+        <button id="returnHomeBtn" type="button" class="action-btn">Back to Home</button>
+        <button id="retryBtn" type="button" class="action-btn secondary">Try Again</button>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="../auth-callback.js"></script>
+</body>
+</html>
