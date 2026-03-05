@@ -1,4 +1,5 @@
 import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
+import { getAuthSession } from "./auth-session.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
@@ -49,7 +50,47 @@ const elements = {
   bookmarkToggle: document.getElementById("bookmarkToggle"),
   directionToggle: document.getElementById("directionToggle"),
   directionValue: document.getElementById("directionValue"),
+  adminPortalGroup: document.getElementById("adminPortalGroup"),
+  accountAvatar: document.getElementById("accountAvatar"),
+  welcomeMessage: document.getElementById("welcomeMessage"),
+  accountIconSvg: document.querySelector(".settings-trigger .library-icon-svg"),
 };
+
+function wireAdminMenu() {
+  const session = getAuthSession();
+  const isAdmin = Boolean(session?.isAdmin || Number(session?.admin || 0) === 1);
+  if (isAdmin) {
+    elements.adminPortalGroup?.classList.remove("hidden");
+  } else {
+    elements.adminPortalGroup?.classList.add("hidden");
+  }
+}
+
+function wireAccountIdentity() {
+  const session = getAuthSession();
+  const givenName = String(session?.givenName || "").trim();
+  const image = String(session?.image || "").trim();
+
+  if (givenName && elements.welcomeMessage) {
+    elements.welcomeMessage.textContent = `Welcome, ${givenName}`;
+    elements.welcomeMessage.classList.remove("hidden");
+  } else {
+    elements.welcomeMessage?.classList.add("hidden");
+  }
+
+  if (image && elements.accountAvatar) {
+    elements.accountAvatar.src = image;
+    elements.accountAvatar.classList.remove("hidden");
+    elements.accountIconSvg?.classList.add("hidden");
+    elements.accountAvatar.onerror = () => {
+      elements.accountAvatar?.classList.add("hidden");
+      elements.accountIconSvg?.classList.remove("hidden");
+    };
+  } else {
+    elements.accountAvatar?.classList.add("hidden");
+    elements.accountIconSvg?.classList.remove("hidden");
+  }
+}
 
 function showLibraryError(message) {
   elements.libraryError.textContent = message;
@@ -879,6 +920,8 @@ async function openMangaById(mangaId, pushState = false) {
 }
 
 async function init() {
+  wireAdminMenu();
+  wireAccountIdentity();
   wireEvents();
   await loadContent();
   renderLibrary();

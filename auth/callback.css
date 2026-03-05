@@ -55,6 +55,10 @@ body {
   animation: spin 1.25s linear infinite;
 }
 
+.logo-orbit.is-static::before {
+  animation: none;
+}
+
 .logo-orbit img {
   position: relative;
   z-index: 1;

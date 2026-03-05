@@ -125,6 +125,23 @@ body {
   border-radius: 999px;
 }
 
+.account-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid #d0d7de;
+}
+
+.settings-welcome {
+  font-size: 0.82rem;
+  color: #3d4a5f;
+  font-weight: 600;
+  padding: 0.42rem 0.56rem 0.52rem;
+  border-bottom: 1px solid #e3e8ef;
+  margin-bottom: 0.2rem;
+}
+
 .settings-dropdown {
   position: absolute;
   right: 0;
@@ -178,6 +195,25 @@ body {
 
 .settings-item.signout .settings-item-icon {
   color: #cf222e;
+}
+
+.settings-group {
+  margin: 0.34rem 0 0.2rem;
+  border-top: 1px solid #d8dee4;
+  padding-top: 0.45rem;
+}
+
+.settings-group-label {
+  padding: 0.18rem 0.56rem 0.42rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #57606a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.settings-subitem {
+  padding-left: 1.4rem;
 }
 
 .library-icon-svg {

@@ -11,7 +11,11 @@ export const cognitoAuthConfig = {
 
 export const appAuthzConfig = {
   // Example: https://abc123.execute-api.us-east-1.amazonaws.com/prod/auth/validate
-  validateUserEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/test",
+  validateUserEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/validate-user",
+  // Example: https://abc123.execute-api.us-east-1.amazonaws.com/prod/admin/get-users
+  getUsersEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-users",
+  // Example: https://abc123.execute-api.us-east-1.amazonaws.com/prod/admin/update-user
+  updateUserEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/update-user",
 };
 
 export const authStorageKeys = {
@@ -45,4 +49,10 @@ export function authzConfigLooksReady() {
     validateUserEndpoint.startsWith("https://") &&
     !validateUserEndpoint.includes("YOUR_VALIDATE_USER_API_ENDPOINT")
   );
+}
+
+export function adminApiConfigLooksReady() {
+  const getUsersEndpoint = String(appAuthzConfig.getUsersEndpoint || "").trim();
+  const updateUserEndpoint = String(appAuthzConfig.updateUserEndpoint || "").trim();
+  return getUsersEndpoint.startsWith("https://") && updateUserEndpoint.startsWith("https://");
 }

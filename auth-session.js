@@ -38,6 +38,21 @@ export function getJwtEmail(token) {
   return String(payload?.email || "").trim();
 }
 
+export function getJwtName(token) {
+  const payload = parseJwtPayload(token);
+  return String(payload?.name || "").trim();
+}
+
+export function getJwtGivenName(token) {
+  const payload = parseJwtPayload(token);
+  return String(payload?.given_name || "").trim();
+}
+
+export function getJwtPicture(token) {
+  const payload = parseJwtPayload(token);
+  return String(payload?.picture || payload?.image || "").trim();
+}
+
 export function getJwtExpiry(token) {
   const payload = parseJwtPayload(token);
   const exp = Number(payload?.exp || 0);

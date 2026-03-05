@@ -16,6 +16,7 @@ Response (`200` for approved/pending/disabled):
   - `email`
   - `name`
   - `status` (`-1` pending, `0` disabled, `1` approved)
+  - `admin` (`0` non-admin, `1` admin)
   - `role`
   - `provider`
   - timestamps
@@ -36,6 +37,7 @@ Table: `Users`
   - `email` (String)
   - `name` (String)
   - `status` (Number)
+  - `admin` (Number `0/1`)
   - `role` (String)
   - `created_at` (String ISO)
   - `requested_at` (String ISO)
@@ -72,3 +74,24 @@ Behavior:
 
 In `auth-config.js`, set:
 - `appAuthzConfig.validateUserEndpoint`
+- `appAuthzConfig.getUsersEndpoint`
+- `appAuthzConfig.updateUserEndpoint`
+
+## Admin APIs
+
+### GET `/get-users`
+- Lambda file: `get_users_lambda.py`
+- Access: admin-only (`admin=1` or `role=admin` on caller record)
+- Response:
+  - `ok`
+  - `users`: list with `user_id`, `name`, `email`, `status`, `admin`, `provider`, timestamps
+
+### PUT `/update-user`
+- Lambda file: `update_user_lambda.py`
+- Access: admin-only
+- Body:
+  - single update: `{"user_id":"<sub>","status":1,"admin":0}`
+  - bulk update: `{"user_ids":["<sub1>","<sub2>"],"status":1}`
+- Allowed values:
+  - `status`: `-1`, `0`, `1`
+  - `admin`: `0`, `1`

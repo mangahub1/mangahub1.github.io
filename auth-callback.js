@@ -11,6 +11,9 @@ import {
   clearAuthSession,
   getJwtEmail,
   getJwtExpiry,
+  getJwtGivenName,
+  getJwtName,
+  getJwtPicture,
   isJwtExpired,
   saveAuthSession,
 } from "./auth-session.js";
@@ -18,6 +21,7 @@ import {
 const statusEl = document.getElementById("status");
 const messageEl = document.getElementById("message");
 const actionsEl = document.getElementById("actions");
+const logoOrbitEl = document.querySelector(".logo-orbit");
 const continueBtn = document.getElementById("continueBtn");
 const returnHomeBtn = document.getElementById("returnHomeBtn");
 const retryBtn = document.getElementById("retryBtn");
@@ -34,6 +38,10 @@ function setMessage(text) {
   }
 }
 
+function stopProgressAnimation() {
+  logoOrbitEl?.classList.add("is-static");
+}
+
 function showFailureActions() {
   if (actionsEl) {
     actionsEl.classList.remove("hidden");
@@ -43,12 +51,12 @@ function showFailureActions() {
   }
 }
 
-function showSuccessActions() {
+function showPendingActions() {
   if (actionsEl) {
     actionsEl.classList.remove("hidden");
   }
   if (continueBtn) {
-    continueBtn.classList.remove("hidden");
+    continueBtn.classList.add("hidden");
   }
 }
 
@@ -86,9 +94,21 @@ async function exchangeAuthorizationCodeForTokens(code, codeVerifier) {
   return JSON.parse(raw);
 }
 
-async function validateUserPermission({ email, accessToken }) {
+async function validateUserPermission({ email, name, given_name, image, accessToken }) {
   const endpoint = appAuthzConfig.validateUserEndpoint;
-  const payload = email ? { email } : {};
+  const payload = {};
+  if (email) {
+    payload.email = email;
+  }
+  if (name) {
+    payload.name = name;
+  }
+  if (given_name) {
+    payload.given_name = given_name;
+  }
+  if (image) {
+    payload.image = image;
+  }
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -177,6 +197,9 @@ async function handleCognitoCallback() {
     const accessToken = String(tokenResponse.access_token || "").trim();
     const refreshToken = String(tokenResponse.refresh_token || "").trim();
     const emailFromIdToken = getJwtEmail(idToken);
+    const nameFromIdToken = getJwtName(idToken);
+    const givenNameFromIdToken = getJwtGivenName(idToken);
+    const imageFromIdToken = getJwtPicture(idToken);
 
     if (!idToken) {
       throw new Error("ID token is missing.");
@@ -191,32 +214,72 @@ async function handleCognitoCallback() {
 
     setStatus("Validating access");
     setMessage("Checking your BluPetal account permissions...");
-    const validation = await validateUserPermission({ email: emailFromIdToken, accessToken });
+    let validation;
+    try {
+      validation = await validateUserPermission({
+        email: emailFromIdToken,
+        name: nameFromIdToken,
+        given_name: givenNameFromIdToken,
+        image: imageFromIdToken,
+        accessToken,
+      });
+    } finally {
+      stopProgressAnimation();
+    }
 
     const user = validation?.user || {};
     const email = String(user?.email || emailFromIdToken || "").trim();
+    const givenName = String(user?.given_name || "").trim();
+    const image = String(user?.image || "").trim();
     const role = String(user?.role || "").trim();
-    const isAdmin = Boolean(validation?.isAdmin || role.toLowerCase() === "admin");
-
-    saveAuthSession({
-      email,
-      idToken,
-      accessToken,
-      refreshToken,
-      role,
-      status: 1,
-      isAdmin,
-      expiresAt: getJwtExpiry(idToken),
-      validatedAt: new Date().toISOString(),
-    });
-
+    const admin = Number(user?.admin ?? 0);
     sessionStorage.removeItem(authStorageKeys.state);
     sessionStorage.removeItem(authStorageKeys.codeVerifier);
+    const status = Number(user?.status ?? 0);
+    const isApproved = Boolean(validation?.isApproved || status === 1);
 
-    setStatus("Access granted");
-    setMessage("API validated the token. You can proceed to the library.");
-    alert("API validated the token and the user can proceed to the library.");
-    showSuccessActions();
+    if (isApproved) {
+      const isAdmin = Boolean(validation?.isAdmin || role.toLowerCase() === "admin");
+      saveAuthSession({
+        email,
+        idToken,
+        accessToken,
+        refreshToken,
+        role,
+        admin,
+        givenName,
+        image,
+        status: 1,
+        isAdmin,
+        expiresAt: getJwtExpiry(idToken),
+        validatedAt: new Date().toISOString(),
+      });
+      setStatus("Access granted");
+      setMessage("Your account is approved. Redirecting to the library...");
+      continueToLibrary();
+      return;
+    }
+
+    clearAuthSession();
+    if (status === -1) {
+      setStatus("Access request received");
+      setMessage(
+        "Your request to access BluPetal is pending review. You will be granted library access once approved."
+      );
+      showPendingActions();
+      return;
+    }
+
+    if (status === 0) {
+      setStatus("Account disabled");
+      setMessage("This account has been disabled. Contact support if you believe this is an error.");
+      showFailureActions();
+      return;
+    }
+
+    setStatus("Access unavailable");
+    setMessage("Your account is not currently approved for library access.");
+    showFailureActions();
   } catch (error) {
     markFailure("Validation failed", error instanceof Error ? error.message : String(error));
   }
