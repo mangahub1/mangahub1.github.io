@@ -1,11 +1,11 @@
 import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
-import { getAuthSession } from "./auth-session.js";
+import { getAuthSession, getJwtGivenName, getJwtPicture } from "./auth/auth-session.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
 
 const CONTENT_DATA_PATH = "./content.json";
-const FALLBACK_THUMBNAIL = "./assets/thumbnails/placeholder.svg";
+const FALLBACK_THUMBNAIL = "./content/thumbnails/placeholder.svg";
 const SINGLE_PAGE_BREAKPOINT = 900;
 const MAX_ZOOM = 2;
 
@@ -21,6 +21,9 @@ const state = {
   singlePageMode: window.innerWidth < SINGLE_PAGE_BREAKPOINT,
   contentItems: [],
   librarySections: [],
+  availableGenres: [],
+  searchQuery: "",
+  selectedGenre: "",
   activeItem: null,
   eventsBound: false,
 };
@@ -54,6 +57,8 @@ const elements = {
   accountAvatar: document.getElementById("accountAvatar"),
   welcomeMessage: document.getElementById("welcomeMessage"),
   accountIconSvg: document.querySelector(".settings-trigger .library-icon-svg"),
+  searchInput: document.getElementById("librarySearchInput"),
+  genreFilters: document.getElementById("libraryGenreFilters"),
 };
 
 function wireAdminMenu() {
@@ -68,8 +73,9 @@ function wireAdminMenu() {
 
 function wireAccountIdentity() {
   const session = getAuthSession();
-  const givenName = String(session?.givenName || "").trim();
-  const image = String(session?.image || "").trim();
+  const idToken = String(session?.idToken || "").trim();
+  const givenName = String(session?.givenName || getJwtGivenName(idToken) || "").trim();
+  const image = String(session?.image || getJwtPicture(idToken) || "").trim();
 
   if (givenName && elements.welcomeMessage) {
     elements.welcomeMessage.textContent = `Welcome, ${givenName}`;
@@ -194,10 +200,18 @@ async function loadContent() {
 
     state.contentItems = contentItems;
     state.librarySections = [...sectionOrder, ...discoveredSections];
+    state.availableGenres = Array.from(
+      new Set(
+        contentItems.flatMap((item) =>
+          Array.isArray(item.genres) ? item.genres : []
+        )
+      )
+    ).sort((a, b) => a.localeCompare(b));
     clearLibraryError();
   } catch (error) {
     state.contentItems = [];
     state.librarySections = [];
+    state.availableGenres = [];
     showLibraryError(
       `Could not load library metadata from ${CONTENT_DATA_PATH}. ${error.message}`
     );
@@ -233,7 +247,7 @@ function createMangaCard(item) {
 
   card.append(cover, title, meta);
   card.addEventListener("click", () => {
-    window.location.href = `./manga.html?manga=${encodeURIComponent(item.id)}`;
+    window.location.href = `./manga/manga.html?manga=${encodeURIComponent(item.id)}`;
   });
 
   return card;
@@ -247,17 +261,48 @@ function renderLibrary() {
     return;
   }
 
+  const normalizedQuery = state.searchQuery.trim().toLowerCase();
+  const hasActiveFilters = Boolean(normalizedQuery || state.selectedGenre);
+  const filteredItems = state.contentItems.filter((item) => {
+    const matchesGenre = !state.selectedGenre || item.genres.includes(state.selectedGenre);
+    if (!matchesGenre) {
+      return false;
+    }
+
+    if (!normalizedQuery) {
+      return true;
+    }
+
+    const haystack = [
+      item.title,
+      item.description,
+      ...(Array.isArray(item.genres) ? item.genres : []),
+    ]
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(normalizedQuery);
+  });
+
+  if (!filteredItems.length) {
+    elements.libraryGrid.innerHTML =
+      '<p class="library-empty">No matches found. Try a different keyword or genre.</p>';
+    return;
+  }
+
   const fragment = document.createDocumentFragment();
 
-  const sectionsToRender = state.librarySections.length
+  const sectionsToRender = hasActiveFilters
+    ? [{ id: "__filtered__", title: "Search Results" }]
+    : state.librarySections.length
     ? state.librarySections
     : [{ id: "all", title: "All Manga" }];
 
   sectionsToRender.forEach((section) => {
+    const sourceItems = hasActiveFilters ? filteredItems : state.contentItems;
     const itemsForSection =
-      section.id === "all"
-        ? state.contentItems
-        : state.contentItems.filter((item) => item.groups.includes(section.id));
+      section.id === "__filtered__" || section.id === "all"
+        ? sourceItems
+        : sourceItems.filter((item) => item.groups.includes(section.id));
 
     if (!itemsForSection.length) {
       return;
@@ -293,6 +338,34 @@ function renderLibrary() {
   elements.libraryGrid.appendChild(fragment);
 }
 
+function renderGenreFilters() {
+  if (!elements.genreFilters) {
+    return;
+  }
+
+  elements.genreFilters.innerHTML = "";
+  const fragment = document.createDocumentFragment();
+  const allGenres = ["All", ...state.availableGenres];
+
+  allGenres.forEach((genre) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "genre-filter-btn";
+    const isAll = genre === "All";
+    const isActive = isAll
+      ? !state.selectedGenre
+      : state.selectedGenre.toLowerCase() === genre.toLowerCase();
+    if (isActive) {
+      button.classList.add("active");
+    }
+    button.setAttribute("data-genre-filter", isAll ? "" : genre);
+    button.textContent = genre;
+    fragment.appendChild(button);
+  });
+
+  elements.genreFilters.appendChild(fragment);
+}
+
 function showLibraryView(pushState = false) {
   elements.libraryView.classList.remove("hidden");
   elements.readerView.classList.add("hidden");
@@ -319,7 +392,7 @@ function updateReaderBackLink() {
     return;
   }
   if (state.activeItem?.id) {
-    elements.libraryLink.href = `./manga.html?manga=${encodeURIComponent(
+    elements.libraryLink.href = `./manga/manga.html?manga=${encodeURIComponent(
       state.activeItem.id
     )}`;
     elements.libraryLink.setAttribute("aria-label", `Back to ${state.activeItem.title}`);
@@ -860,6 +933,29 @@ function wireEvents() {
     void openMangaById(mangaId, false);
   });
 
+  elements.searchInput?.addEventListener("input", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+    state.searchQuery = target.value || "";
+    renderLibrary();
+  });
+
+  elements.genreFilters?.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    const btn = target.closest("[data-genre-filter]");
+    if (!(btn instanceof HTMLElement)) {
+      return;
+    }
+    state.selectedGenre = String(btn.getAttribute("data-genre-filter") || "").trim();
+    renderGenreFilters();
+    renderLibrary();
+  });
+
   state.eventsBound = true;
 }
 
@@ -924,6 +1020,7 @@ async function init() {
   wireAccountIdentity();
   wireEvents();
   await loadContent();
+  renderGenreFilters();
   renderLibrary();
 
   const mangaId = new URLSearchParams(window.location.search).get("manga");
@@ -936,3 +1033,6 @@ async function init() {
 }
 
 void init();
+
+
+

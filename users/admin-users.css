@@ -41,7 +41,7 @@
 .admin-controls {
   margin-top: 1rem;
   display: grid;
-  grid-template-columns: 200px minmax(220px, 1fr) auto auto;
+  grid-template-columns: 200px 110px minmax(220px, 1fr) auto auto;
   gap: 0.7rem;
   align-items: end;
 }
@@ -65,6 +65,11 @@
   background: #fff;
   padding: 0 0.7rem;
   font-size: 0.94rem;
+}
+
+.admin-control input::placeholder {
+  font-style: italic;
+  color: #b8b8b8;
 }
 
 .admin-btn {
@@ -120,7 +125,7 @@
 .admin-grid {
   width: 100%;
   border-collapse: collapse;
-  min-width: 920px;
+  min-width: 960px;
 }
 
 .admin-grid th,
@@ -147,39 +152,26 @@
   width: 44px;
 }
 
+.col-avatar {
+  width: 40px;
+}
+
 .col-action {
   width: 112px;
 }
 
-.status-chip {
-  display: inline-flex;
-  align-items: center;
+.avatar-cell {
+  width: 40px;
+}
+
+.user-avatar {
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
-  padding: 0.2rem 0.58rem;
-  font-size: 0.76rem;
-  font-weight: 700;
-}
-
-.status-chip.pending {
-  background: #fff4e7;
-  color: #9b4d00;
-}
-
-.status-chip.approved {
-  background: #ecfdf2;
-  color: #136537;
-}
-
-.status-chip.disabled {
-  background: #ffecef;
-  color: #a41538;
-}
-
-.status-cell,
-.admin-cell {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
+  object-fit: cover;
+  display: block;
+  border: 1px solid #d8deea;
+  background: #f3f6fb;
 }
 
 .status-edit,
@@ -190,6 +182,7 @@
   background: #fff;
   font-size: 0.83rem;
   padding: 0 0.45rem;
+  min-width: 120px;
 }
 
 .row-save-btn {
@@ -201,6 +194,21 @@
   font-size: 0.8rem;
   font-weight: 700;
   padding: 0 0.62rem;
+}
+
+.admin-grid tr.row-dirty td {
+  background: #fffbea;
+}
+
+.admin-grid tr.row-dirty .status-edit,
+.admin-grid tr.row-dirty .admin-edit {
+  border-color: #e7c24d;
+  box-shadow: 0 0 0 1px rgba(201, 150, 0, 0.14);
+}
+
+.admin-grid tr.row-dirty .row-save-btn {
+  border-color: #d6a80f;
+  color: #7d5d00;
 }
 
 .row-save-btn:hover:not(:disabled) {

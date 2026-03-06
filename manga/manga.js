@@ -1,5 +1,12 @@
-const CONTENT_DATA_PATH = "./content.json";
-const FALLBACK_THUMBNAIL = "./assets/thumbnails/placeholder.svg";
+import {
+  clearAuthSession,
+  getAuthSession,
+  getJwtGivenName,
+  getJwtPicture,
+} from "../auth/auth-session.js";
+
+const CONTENT_DATA_PATH = "../content.json";
+const FALLBACK_THUMBNAIL = "../content/thumbnails/placeholder.svg";
 
 const elements = {
   mangaPage: document.getElementById("mangaPage"),
@@ -15,7 +22,54 @@ const elements = {
   metaRating: document.getElementById("metaRating"),
   volumeList: document.getElementById("volumeList"),
   startReadingBtn: document.getElementById("startReadingBtn"),
+  accountAvatar: document.getElementById("accountAvatar"),
+  welcomeMessage: document.getElementById("welcomeMessage"),
+  accountIconSvg: document.querySelector(".settings-trigger .library-icon-svg"),
+  adminPortalGroup: document.getElementById("adminPortalGroup"),
+  signoutLink: document.querySelector(".settings-item.signout"),
 };
+
+function wireAccountMenu() {
+  const session = getAuthSession();
+  const isAdmin = Boolean(session?.isAdmin || Number(session?.admin || 0) === 1);
+  const idToken = String(session?.idToken || "").trim();
+  const givenName = String(
+    session?.givenName || session?.given_name || getJwtGivenName(idToken) || ""
+  ).trim();
+  const image = String(
+    session?.image || session?.picture || session?.avatar || getJwtPicture(idToken) || ""
+  ).trim();
+
+  if (isAdmin) {
+    elements.adminPortalGroup?.classList.remove("hidden");
+  } else {
+    elements.adminPortalGroup?.classList.add("hidden");
+  }
+
+  if (givenName && elements.welcomeMessage) {
+    elements.welcomeMessage.textContent = `Welcome, ${givenName}`;
+    elements.welcomeMessage.classList.remove("hidden");
+  } else {
+    elements.welcomeMessage?.classList.add("hidden");
+  }
+
+  if (image && elements.accountAvatar) {
+    elements.accountAvatar.src = image;
+    elements.accountAvatar.classList.remove("hidden");
+    elements.accountIconSvg?.classList.add("hidden");
+    elements.accountAvatar.onerror = () => {
+      elements.accountAvatar?.classList.add("hidden");
+      elements.accountIconSvg?.classList.remove("hidden");
+    };
+  } else {
+    elements.accountAvatar?.classList.add("hidden");
+    elements.accountIconSvg?.classList.remove("hidden");
+  }
+
+  elements.signoutLink?.addEventListener("click", () => {
+    clearAuthSession();
+  });
+}
 
 function showError(message) {
   elements.mangaError.textContent = message;
@@ -67,7 +121,7 @@ function normalizeVolumes(item) {
 }
 
 function buildReaderUrl(item, volume) {
-  const url = new URL("./library.html", window.location.href);
+  const url = new URL("../library.html", window.location.href);
   url.searchParams.set("manga", item.id);
   if (volume?.id) {
     url.searchParams.set("volume", volume.id);
@@ -146,6 +200,7 @@ function render(item) {
 }
 
 async function init() {
+  wireAccountMenu();
   const mangaId = new URLSearchParams(window.location.search).get("manga");
   if (!mangaId) {
     showError('Missing "manga" query parameter. Open from the library page.');
@@ -173,3 +228,6 @@ async function init() {
 }
 
 void init();
+
+
+

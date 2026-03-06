@@ -229,8 +229,8 @@ async function handleCognitoCallback() {
 
     const user = validation?.user || {};
     const email = String(user?.email || emailFromIdToken || "").trim();
-    const givenName = String(user?.given_name || "").trim();
-    const image = String(user?.image || "").trim();
+    const givenName = String(user?.given_name || givenNameFromIdToken || "").trim();
+    const image = String(user?.image || imageFromIdToken || "").trim();
     const role = String(user?.role || "").trim();
     const admin = Number(user?.admin ?? 0);
     sessionStorage.removeItem(authStorageKeys.state);

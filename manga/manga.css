@@ -57,6 +57,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  position: relative;
 }
 
 .library-icon-btn {
@@ -87,6 +88,120 @@ body {
   stroke-linecap: round;
   stroke-linejoin: round;
   display: block;
+}
+
+.settings-menu {
+  position: relative;
+}
+
+.settings-menu > summary {
+  list-style: none;
+}
+
+.settings-menu > summary::marker {
+  content: "";
+}
+
+.settings-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+}
+
+.account-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid #d0d7de;
+}
+
+.settings-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.45rem);
+  min-width: 200px;
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(140, 149, 159, 0.2);
+  padding: 0.4rem 0.38rem;
+  z-index: 30;
+}
+
+.settings-welcome {
+  font-size: 0.82rem;
+  color: #3d4a5f;
+  font-weight: 600;
+  padding: 0.42rem 0.56rem 0.52rem;
+  border-bottom: 1px solid #e3e8ef;
+  margin-bottom: 0.2rem;
+}
+
+.settings-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  color: #24292f;
+  font-size: 0.84rem;
+  font-weight: 400;
+  border-radius: 6px;
+  padding: 0.47rem 0.56rem;
+  line-height: 1.2;
+}
+
+.settings-item:hover {
+  background: #f6f8fa;
+  color: #24292f;
+}
+
+.settings-item-icon {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  color: #57606a;
+  flex: 0 0 auto;
+}
+
+.settings-group {
+  margin: 0.34rem 0 0.2rem;
+  border-top: 1px solid #d8dee4;
+  padding-top: 0.45rem;
+}
+
+.settings-group-label {
+  padding: 0.18rem 0.56rem 0.42rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #57606a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.settings-subitem {
+  padding-left: 1.4rem;
+}
+
+.settings-item.signout {
+  margin-top: 0.34rem;
+  border-top: 1px solid #d8dee4;
+  padding-top: 0.6rem;
+  color: #cf222e;
+}
+
+.settings-item.signout:hover {
+  background: #fff2f3;
+  color: #cf222e;
+}
+
+.settings-item.signout .settings-item-icon {
+  color: #cf222e;
 }
 
 .manga-page {

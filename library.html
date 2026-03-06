@@ -21,15 +21,16 @@
         </nav>
       </div>
       <div class="library-nav-right">
-        <button type="button" class="library-icon-btn" aria-label="Search">
-          <svg class="library-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="11" cy="11" r="6.5"></circle>
-            <line x1="16" y1="16" x2="21" y2="21"></line>
-          </svg>
-        </button>
         <details class="settings-menu">
           <summary class="library-icon-btn settings-trigger" aria-label="Account settings">
-            <img id="accountAvatar" class="account-avatar hidden" src="" alt="Account avatar" />
+            <img
+              id="accountAvatar"
+              class="account-avatar hidden"
+              src=""
+              alt="Account avatar"
+              referrerpolicy="no-referrer"
+              decoding="async"
+            />
             <svg class="library-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="12" cy="8.1" r="3.1"></circle>
               <path d="M5.4 19.2a6.6 6.6 0 0 1 13.2 0"></path>
@@ -51,7 +52,7 @@
             </a>
             <div id="adminPortalGroup" class="settings-group hidden" aria-label="Admin portal">
               <div class="settings-group-label">Admin Portal</div>
-              <a href="./admin-users.html" class="settings-item settings-subitem">
+              <a href="./users/admin-users.html" class="settings-item settings-subitem">
                 <span>User Accounts</span>
               </a>
               <a href="./library.html" class="settings-item settings-subitem">
@@ -70,6 +71,17 @@
     </header>
 
     <main class="library-shell">
+      <section class="library-search-panel" aria-label="Library search and filter">
+        <div class="library-search-row">
+          <input
+            id="librarySearchInput"
+            class="library-search-input"
+            type="search"
+            placeholder="Search by title, description, or genre"
+          />
+        </div>
+        <div id="libraryGenreFilters" class="library-genre-filters" role="group" aria-label="Filter by genre"></div>
+      </section>
       <section id="libraryError" class="error-banner hidden" role="alert" aria-live="assertive"></section>
       <section id="libraryGrid" class="library-grid" aria-label="Manga library"></section>
     </main>
@@ -170,8 +182,10 @@
     </footer>
   </section>
 
-  <script type="module" src="./auth-guard.js"></script>
+  <script type="module" src="./auth/auth-guard.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
+
+
 

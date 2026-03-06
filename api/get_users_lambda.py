@@ -81,6 +81,7 @@ def _normalize_user(item):
         "user_id": str(item.get("user_id", "")).strip(),
         "name": str(item.get("name", "")).strip(),
         "email": str(item.get("email", "")).strip().lower(),
+        "image": str(item.get("image", "")).strip(),
         "status": _normalize_number(item.get("status"), default=-1),
         "admin": _normalize_number(item.get("admin"), default=0),
         "provider": str(item.get("provider", "")).strip(),
@@ -127,7 +128,7 @@ def lambda_handler(event, context):
 
     users = []
     scan_args = {
-        "ProjectionExpression": "#user_id, #name, email, #status, admin, provider, last_login, requested_at, approved_at, created_at",
+        "ProjectionExpression": "#user_id, #name, email, image, #status, admin, provider, last_login, requested_at, approved_at, created_at",
         "ExpressionAttributeNames": {
             "#user_id": "user_id",
             "#name": "name",

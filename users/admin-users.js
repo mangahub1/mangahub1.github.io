@@ -1,5 +1,11 @@
-import { adminApiConfigLooksReady, appAuthzConfig } from "./auth-config.js";
-import { clearAuthSession, getAuthSession, isJwtExpired } from "./auth-session.js";
+import { adminApiConfigLooksReady, appAuthzConfig } from "../auth/auth-config.js";
+import {
+  clearAuthSession,
+  getAuthSession,
+  getJwtGivenName,
+  getJwtPicture,
+  isJwtExpired,
+} from "../auth/auth-session.js";
 
 const state = {
   users: [],
@@ -12,6 +18,7 @@ const elements = {
   error: document.getElementById("adminError"),
   success: document.getElementById("adminSuccess"),
   statusFilter: document.getElementById("statusFilter"),
+  adminFilter: document.getElementById("adminFilter"),
   searchInput: document.getElementById("searchInput"),
   refreshBtn: document.getElementById("refreshBtn"),
   approveSelectedBtn: document.getElementById("approveSelectedBtn"),
@@ -60,24 +67,13 @@ function normalizeNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function statusLabel(status) {
-  if (status === 1) {
-    return "Approved";
-  }
-  if (status === 0) {
-    return "Disabled";
-  }
-  return "Pending";
-}
-
-function statusClass(status) {
-  if (status === 1) {
-    return "approved";
-  }
-  if (status === 0) {
-    return "disabled";
-  }
-  return "pending";
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function ensureAdminSession() {
@@ -111,12 +107,20 @@ function ensureAdminSession() {
 function setBusy(nextBusy) {
   state.busy = nextBusy;
   elements.refreshBtn.disabled = nextBusy;
-  elements.approveSelectedBtn.disabled = nextBusy;
+  updateApproveSelectedState();
+  elements.tableBody
+    .querySelectorAll("[data-save-row]")
+    .forEach((btn) => {
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = nextBusy;
+      }
+    });
 }
 
 function wireAccountIdentity() {
-  const givenName = String(state.session?.givenName || "").trim();
-  const image = String(state.session?.image || "").trim();
+  const idToken = String(state.session?.idToken || "").trim();
+  const givenName = String(state.session?.givenName || getJwtGivenName(idToken) || "").trim();
+  const image = String(state.session?.image || getJwtPicture(idToken) || "").trim();
 
   if (givenName && elements.welcomeMessage) {
     elements.welcomeMessage.textContent = `Welcome, ${givenName}`;
@@ -150,20 +154,32 @@ function updateSelectAllState() {
   if (!checkboxes.length) {
     elements.selectAll.checked = false;
     elements.selectAll.indeterminate = false;
+    updateApproveSelectedState();
     return;
   }
   const checked = checkboxes.filter((box) => box.checked).length;
   elements.selectAll.checked = checked === checkboxes.length;
   elements.selectAll.indeterminate = checked > 0 && checked < checkboxes.length;
+  updateApproveSelectedState();
+}
+
+function updateApproveSelectedState() {
+  const selectedCount = getSelectedUserIds().length;
+  elements.approveSelectedBtn.disabled = state.busy || selectedCount === 0;
 }
 
 function applyFilters() {
   const statusFilter = String(elements.statusFilter.value || "").trim();
+  const adminFilter = String(elements.adminFilter.value || "").trim();
   const search = String(elements.searchInput.value || "").trim().toLowerCase();
 
   state.filteredUsers = state.users.filter((user) => {
     const userStatus = normalizeNumber(user.status, -1);
     if (statusFilter && userStatus !== normalizeNumber(statusFilter, -999)) {
+      return false;
+    }
+    const userAdmin = normalizeNumber(user.admin, 0);
+    if (adminFilter && userAdmin !== normalizeNumber(adminFilter, -999)) {
       return false;
     }
 
@@ -179,6 +195,32 @@ function applyFilters() {
   renderUsers();
 }
 
+function isRowDirty(row) {
+  if (!(row instanceof HTMLTableRowElement)) {
+    return false;
+  }
+  const statusInput = row.querySelector("[data-status-edit]");
+  const adminInput = row.querySelector("[data-admin-edit]");
+  const originalStatus = normalizeNumber(row.getAttribute("data-original-status"), -1);
+  const originalAdmin = normalizeNumber(row.getAttribute("data-original-admin"), 0);
+  const currentStatus = normalizeNumber(statusInput?.value, -1);
+  const currentAdmin = normalizeNumber(adminInput?.value, 0);
+  return currentStatus !== originalStatus || currentAdmin !== originalAdmin;
+}
+
+function updateRowDirtyState(row) {
+  if (!(row instanceof HTMLTableRowElement)) {
+    return;
+  }
+  const dirty = isRowDirty(row);
+  row.classList.toggle("row-dirty", dirty);
+  const saveBtn = row.querySelector("[data-save-row]");
+  if (saveBtn instanceof HTMLButtonElement) {
+    saveBtn.hidden = !dirty;
+    saveBtn.disabled = state.busy;
+  }
+}
+
 function renderUsers() {
   if (!elements.tableBody) {
     return;
@@ -192,57 +234,66 @@ function renderUsers() {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
     cell.className = "admin-grid-empty";
-    cell.colSpan = 6;
+    cell.colSpan = 7;
     cell.textContent = "No users match the selected filters.";
     row.appendChild(cell);
     elements.tableBody.appendChild(row);
     elements.resultsCount.textContent = "0 users";
+    updateApproveSelectedState();
     return;
   }
 
   const fragment = document.createDocumentFragment();
   state.filteredUsers.forEach((user) => {
     const userId = String(user.user_id || "").trim();
+    const userName = String(user.name || "").trim();
+    const userEmail = String(user.email || "").trim();
+    const userImage = String(user.image || "").trim();
     const row = document.createElement("tr");
 
     const currentStatus = normalizeNumber(user.status, -1);
     const currentAdmin = normalizeNumber(user.admin, 0);
+    row.setAttribute("data-user-id", userId);
+    row.setAttribute("data-original-status", String(currentStatus));
+    row.setAttribute("data-original-admin", String(currentAdmin));
 
     row.innerHTML = `
       <td>
         <input type="checkbox" data-user-select="true" data-user-id="${userId}" aria-label="Select ${String(
-      user.email || userId
+      userEmail || userId
     )}" />
       </td>
-      <td>${String(user.name || "").trim() || "-"}</td>
-      <td>${String(user.email || "").trim() || "-"}</td>
+      <td class="avatar-cell">
+        ${
+          userImage
+            ? `<img class="user-avatar" src="${escapeHtml(userImage)}" alt="" loading="lazy" referrerpolicy="no-referrer" decoding="async" />`
+            : ""
+        }
+      </td>
+      <td>${escapeHtml(userName || "-")}</td>
+      <td>${escapeHtml(userEmail || "-")}</td>
       <td>
-        <div class="status-cell">
-          <span class="status-chip ${statusClass(currentStatus)}">${statusLabel(currentStatus)}</span>
-          <select class="status-edit" data-status-edit="${userId}" aria-label="Status for ${String(
-      user.email || userId
+        <select class="status-edit" data-status-edit="${userId}" aria-label="Status for ${String(
+      userEmail || userId
     )}">
-            <option value="-1" ${currentStatus === -1 ? "selected" : ""}>Pending</option>
-            <option value="1" ${currentStatus === 1 ? "selected" : ""}>Approved</option>
-            <option value="0" ${currentStatus === 0 ? "selected" : ""}>Disabled</option>
-          </select>
-        </div>
+          <option value="-1" ${currentStatus === -1 ? "selected" : ""}>Pending</option>
+          <option value="1" ${currentStatus === 1 ? "selected" : ""}>Approved</option>
+          <option value="0" ${currentStatus === 0 ? "selected" : ""}>Disabled</option>
+        </select>
       </td>
       <td>
-        <div class="admin-cell">
-          <span>${currentAdmin === 1 ? "Yes" : "No"}</span>
-          <select class="admin-edit" data-admin-edit="${userId}" aria-label="Admin for ${String(
-      user.email || userId
+        <select class="admin-edit" data-admin-edit="${userId}" aria-label="Admin for ${String(
+      userEmail || userId
     )}">
-            <option value="0" ${currentAdmin === 0 ? "selected" : ""}>No</option>
-            <option value="1" ${currentAdmin === 1 ? "selected" : ""}>Yes</option>
-          </select>
-        </div>
+          <option value="0" ${currentAdmin === 0 ? "selected" : ""}>No</option>
+          <option value="1" ${currentAdmin === 1 ? "selected" : ""}>Yes</option>
+        </select>
       </td>
       <td>
-        <button type="button" class="row-save-btn" data-save-row="${userId}">Save</button>
+        <button type="button" class="row-save-btn" data-save-row="${userId}" hidden>Save</button>
       </td>
     `;
+    updateRowDirtyState(row);
     fragment.appendChild(row);
   });
 
@@ -254,6 +305,7 @@ function renderUsers() {
   elements.tableBody
     .querySelectorAll('input[data-user-select="true"]')
     .forEach((input) => input.addEventListener("change", updateSelectAllState));
+  updateApproveSelectedState();
 }
 
 async function requestJson(url, options) {
@@ -342,13 +394,18 @@ async function handleBulkApprove() {
   }
 }
 
-async function handleRowSave(userId) {
+async function handleRowSave(row) {
+  if (!(row instanceof HTMLTableRowElement)) {
+    return;
+  }
+
+  const userId = String(row.getAttribute("data-user-id") || "").trim();
   if (!userId) {
     return;
   }
 
-  const statusInput = document.querySelector(`[data-status-edit="${userId}"]`);
-  const adminInput = document.querySelector(`[data-admin-edit="${userId}"]`);
+  const statusInput = row.querySelector("[data-status-edit]");
+  const adminInput = row.querySelector("[data-admin-edit]");
   const nextStatus = normalizeNumber(statusInput?.value, -1);
   const nextAdmin = normalizeNumber(adminInput?.value, 0);
 
@@ -371,6 +428,7 @@ async function handleRowSave(userId) {
 
 function wireEvents() {
   elements.statusFilter.addEventListener("change", applyFilters);
+  elements.adminFilter.addEventListener("change", applyFilters);
   elements.searchInput.addEventListener("input", applyFilters);
   elements.refreshBtn.addEventListener("click", async () => {
     try {
@@ -401,8 +459,20 @@ function wireEvents() {
     if (!saveBtn) {
       return;
     }
-    const userId = String(saveBtn.getAttribute("data-save-row") || "").trim();
-    void handleRowSave(userId);
+    const row = saveBtn.closest("tr");
+    void handleRowSave(row);
+  });
+
+  elements.tableBody.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    if (!target.matches("[data-status-edit], [data-admin-edit]")) {
+      return;
+    }
+    const row = target.closest("tr");
+    updateRowDirtyState(row);
   });
 
   elements.signoutLinks.forEach((link) => {
@@ -426,3 +496,5 @@ async function init() {
 }
 
 void init();
+
+

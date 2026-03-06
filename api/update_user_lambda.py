@@ -127,11 +127,12 @@ def _http_method(event):
 
 def _update_one_user(user_id, next_status, next_admin):
     update_parts = ["#updated_at = :updated_at"]
-    names = {"#updated_at": "updated_at", "#status": "status", "#admin": "admin"}
+    names = {"#updated_at": "updated_at"}
     values = {":updated_at": _iso_utc_now()}
     remove_parts = []
 
     if next_status is not None:
+        names["#status"] = "status"
         update_parts.append("#status = :status")
         values[":status"] = next_status
         if next_status == 1:
@@ -143,6 +144,7 @@ def _update_one_user(user_id, next_status, next_admin):
             remove_parts.append("#approved_at")
 
     if next_admin is not None:
+        names["#admin"] = "admin"
         update_parts.append("#admin = :admin")
         values[":admin"] = next_admin
 

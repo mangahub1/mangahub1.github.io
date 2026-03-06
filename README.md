@@ -7,12 +7,12 @@ Flow:
 - `manga.html`: manga detail page (cover, description, metadata, volume list).
 - `library.html?manga=<id>`: PDF reader experience.
 
-1) Put PDF files into `/pdfs/`.
+1) Put PDF files into `/content/pdfs/`.
 2) Update `content.json` with one entry per manga:
    - `id`: unique key used in URL query (`?manga=<id>`)
    - `title`: display title for library tile
    - `pdf`: relative path to the PDF
-   - `thumbnail`: relative path to cover image (placeholders are in `/assets/thumbnails/`)
+   - `thumbnail`: relative path to cover image (placeholders are in `/content/thumbnails/`)
    - `genres`: array shown under the title (for example `["Boys' Love", "Drama"]`)
    - `groups`: array of section ids so a manga can appear in multiple shelves
    - optional `author`, `ageRating`, `status`, `rating`, `ratingCount`
@@ -48,4 +48,5 @@ Cognito + authorization flow:
   - disabled users (`status=0`) are blocked
 - `library.html` enforces auth guard and redirects home if session/token is missing or invalid.
 - Lambda starter for user permission checks is in `api/validate_user_lambda.py`.
+
 

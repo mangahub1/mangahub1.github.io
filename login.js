@@ -1,4 +1,4 @@
-import { bindCognitoLoginTrigger, startCognitoLogin } from "./auth-login.js";
+import { bindCognitoLoginTrigger, startCognitoLogin } from "./auth/auth-login.js";
 
 const loginLink = document.getElementById("cognitoLoginLink");
 
@@ -8,3 +8,4 @@ bindCognitoLoginTrigger(loginLink);
 void startCognitoLogin().catch(() => {
   // Ignore here; manual click remains available and surfaces the exact error.
 });
+
