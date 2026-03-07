@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BluPetal Admin - Content</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon.png" />
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="stylesheet" href="./admin-content.css" />
+</head>
+<body class="library-active admin-page">
+  <header class="library-topbar">
+    <div class="library-nav-left">
+      <a href="../library.html" class="library-brand" aria-label="BluPetal home">
+        <img src="../assets/logo-header.png" alt="BluPetal" />
+      </a>
+      <nav class="library-nav-links" aria-label="Primary">
+        <a href="../users/admin-users.html">User Accounts</a>
+        <a href="./admin-content.html" aria-current="page">Content</a>
+      </nav>
+    </div>
+    <div class="library-nav-right">
+      <details class="settings-menu">
+        <summary class="library-icon-btn settings-trigger" aria-label="Account settings">
+          <img
+            id="accountAvatar"
+            class="account-avatar hidden"
+            src=""
+            alt="Account avatar"
+            referrerpolicy="no-referrer"
+            decoding="async"
+          />
+          <svg class="library-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="8.1" r="3.1"></circle>
+            <path d="M5.4 19.2a6.6 6.6 0 0 1 13.2 0"></path>
+          </svg>
+        </summary>
+        <nav class="settings-dropdown" aria-label="Account menu">
+          <div id="welcomeMessage" class="settings-welcome hidden"></div>
+          <div class="settings-group" aria-label="Admin portal">
+            <div class="settings-group-label">Admin Portal</div>
+            <a href="../users/admin-users.html" class="settings-item settings-subitem">User Accounts</a>
+            <a href="./admin-content.html" class="settings-item settings-subitem">Content</a>
+          </div>
+          <a href="../index.html" class="settings-item signout">
+            <svg class="settings-item-icon" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M2 2.75C2 1.784 2.784 1 3.75 1h2.5a.75.75 0 0 1 0 1.5h-2.5a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h2.5a.75.75 0 0 1 0 1.5h-2.5A1.75 1.75 0 0 1 2 13.25Zm10.44 4.5-1.97-1.97a.749.749 0 0 1 .326-1.275.749.749 0 0 1 .734.215l3.25 3.25a.75.75 0 0 1 0 1.06l-3.25 3.25a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734l1.97-1.97H6.75a.75.75 0 0 1 0-1.5Z"></path>
+            </svg>
+            <span>Sign out</span>
+          </a>
+        </nav>
+      </details>
+    </div>
+  </header>
+
+  <main class="admin-shell">
+    <section class="admin-header">
+      <h1>Content Library</h1>
+      <p>Manage manga metadata and upload source files.</p>
+    </section>
+
+    <section id="adminError" class="admin-banner admin-banner-error hidden" role="alert"></section>
+    <section id="adminSuccess" class="admin-banner admin-banner-success hidden" role="status"></section>
+
+    <section class="admin-controls">
+      <label class="admin-control admin-control-search">
+        <span>Search</span>
+        <input id="searchInput" type="search" placeholder="Find by title, author, content id" />
+      </label>
+      <label class="admin-control">
+        <span>Type</span>
+        <select id="contentTypeFilter">
+          <option value="">All</option>
+        </select>
+      </label>
+      <button id="refreshBtn" type="button" class="admin-btn admin-btn-secondary">Refresh</button>
+      <button id="addNewBtn" type="button" class="admin-btn">Add New</button>
+    </section>
+
+    <section class="admin-grid-shell">
+      <div class="admin-grid-meta">
+        <span id="resultsCount">0 records</span>
+      </div>
+      <div class="admin-grid-wrap">
+        <table class="admin-grid">
+          <thead>
+            <tr>
+              <th class="col-thumb"></th>
+              <th>Title</th>
+              <th>Author</th>
+              <th>Publisher</th>
+              <th>Type</th>
+              <th>Updated</th>
+              <th class="col-action"></th>
+            </tr>
+          </thead>
+          <tbody id="contentTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <section id="contentModal" class="modal-shell hidden" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal="true"></div>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="contentModalTitle">
+      <div class="modal-head">
+        <h2 id="contentModalTitle">Edit Content</h2>
+        <button id="closeModalBtn" type="button" class="modal-close" aria-label="Close">X</button>
+      </div>
+      <section id="contentModalError" class="admin-banner admin-banner-error hidden" role="alert"></section>
+      <form id="contentForm" class="content-form">
+        <div class="form-grid">
+          <label>
+            <span>Content ID</span>
+            <input id="contentIdInput" name="content_id" type="text" readonly placeholder="Auto-assigned on create" />
+          </label>
+          <label>
+            <span>Content Type</span>
+            <input id="contentTypeInput" name="content_type" type="text" value="manga" />
+          </label>
+          <label class="span-2">
+            <span>Title</span>
+            <input id="titleInput" name="title" type="text" required />
+          </label>
+          <label>
+            <span>Publisher</span>
+            <input id="publisherInput" name="publisher" type="text" />
+          </label>
+          <label>
+            <span>Series</span>
+            <input id="seriesInput" name="series" type="text" />
+          </label>
+          <label>
+            <span>Age Rating</span>
+            <input id="ageRatingInput" name="age_rating" type="text" />
+          </label>
+          <label>
+            <span>Release Date</span>
+            <input id="releaseDateInput" name="release_date" type="text" />
+          </label>
+          <label>
+            <span>Page Length</span>
+            <input id="pageLengthInput" name="page_length" type="text" />
+          </label>
+          <label>
+            <span>Contents Volume</span>
+            <input id="contentsVolumeInput" name="contents_volume" type="text" />
+          </label>
+          <label>
+            <span>Volume</span>
+            <input id="volumeInput" name="volume" type="text" />
+          </label>
+          <label>
+            <span>Contents Name</span>
+            <input id="contentsNameInput" name="contents_name" type="text" />
+          </label>
+          <label>
+            <span>Contents ID</span>
+            <input id="contentsIdInput" name="contents_id" type="text" />
+          </label>
+          <label>
+            <span>Author</span>
+            <input id="authorInput" name="author" type="text" />
+          </label>
+          <label>
+            <span>Price</span>
+            <input id="priceInput" name="price" type="text" />
+          </label>
+          <label>
+            <span>File Format</span>
+            <input id="fileFormatInput" name="file_format" type="text" />
+          </label>
+          <label>
+            <span>Concluded (0 or 1)</span>
+            <input id="concludedInput" name="concluded" type="text" />
+          </label>
+          <label>
+            <span>BISAC</span>
+            <input id="bisacInput" name="bisac" type="text" />
+          </label>
+          <label>
+            <span>Sales Restriction</span>
+            <input id="salesRestrictionInput" name="sales_restriction" type="text" />
+          </label>
+          <label>
+            <span>Japanese Title</span>
+            <input id="japaneseTitleInput" name="japanese_title" type="text" />
+          </label>
+          <label class="span-2">
+            <span>Keywords</span>
+            <input id="keywordsInput" name="keywords" type="text" />
+          </label>
+          <label class="span-2">
+            <span>Copyright</span>
+            <input id="copyrightInput" name="copyright" type="text" />
+          </label>
+          <label class="span-2">
+            <span>Synopsis</span>
+            <textarea id="synopsisInput" name="synopsis" rows="3"></textarea>
+          </label>
+          <label class="span-2">
+            <span>Additional Metadata (JSON object)</span>
+            <textarea id="extraMetadataInput" name="extra_metadata" rows="4" placeholder='{"volumes":[...]}'></textarea>
+          </label>
+          <label class="span-2">
+            <span>PDF Upload</span>
+            <input id="pdfFileInput" name="pdf_file" type="file" accept=".pdf,application/pdf" />
+          </label>
+          <label class="span-2">
+            <span>Thumbnail Upload (optional if PDF thumbnail generation succeeds)</span>
+            <input id="thumbnailFileInput" name="thumbnail_file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" />
+          </label>
+          <label class="span-2">
+            <span>Current PDF URL</span>
+            <input id="pdfUrlInput" name="pdf_url" type="text" readonly />
+          </label>
+          <label class="span-2">
+            <span>Current Thumbnail URL</span>
+            <input id="thumbnailUrlInput" name="thumbnail_url" type="text" readonly />
+          </label>
+        </div>
+        <div class="form-actions">
+          <button id="cancelBtn" type="button" class="admin-btn admin-btn-secondary">Cancel</button>
+          <button id="saveBtn" type="submit" class="admin-btn">Save</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section id="contentPreviewModal" class="preview-shell hidden" aria-hidden="true">
+    <div class="preview-backdrop" data-close-preview="true"></div>
+    <div class="preview-panel" role="dialog" aria-modal="true" aria-labelledby="contentPreviewTitle">
+      <div class="preview-head">
+        <h2 id="contentPreviewTitle">Content Preview</h2>
+        <button id="closePreviewBtn" type="button" class="modal-close" aria-label="Close preview">X</button>
+      </div>
+      <iframe id="contentPreviewFrame" class="preview-frame" title="PDF Preview" loading="lazy"></iframe>
+    </div>
+  </section>
+
+  <script type="module" src="../auth/auth-guard.js"></script>
+  <script type="module" src="./admin-content.js"></script>
+</body>
+</html>

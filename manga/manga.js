@@ -120,6 +120,22 @@ function normalizeVolumes(item) {
   }));
 }
 
+function resolveContentAssetPath(path) {
+  const value = String(path || "").trim();
+  if (!value) {
+    return "";
+  }
+  if (/^(?:https?:|data:|blob:)/i.test(value)) {
+    return value;
+  }
+  try {
+    const contentBaseUrl = new URL(CONTENT_DATA_PATH, window.location.href);
+    return new URL(value, contentBaseUrl).toString();
+  } catch (_error) {
+    return value;
+  }
+}
+
 function buildReaderUrl(item, volume) {
   const url = new URL("../library.html", window.location.href);
   url.searchParams.set("manga", item.id);
@@ -137,7 +153,7 @@ function render(item) {
   elements.mangaTitle.textContent = item.title || "Untitled Manga";
   document.title = `${item.title || "Manga"} - BluPetal`;
 
-  elements.mangaCover.src = item.thumbnail || FALLBACK_THUMBNAIL;
+  elements.mangaCover.src = resolveContentAssetPath(item.thumbnail) || FALLBACK_THUMBNAIL;
   elements.mangaCover.alt = `${item.title || "Manga"} cover`;
   elements.mangaCover.addEventListener("error", () => {
     elements.mangaCover.src = FALLBACK_THUMBNAIL;

@@ -167,6 +167,27 @@ function sanitizeSection(section) {
   return { id, title };
 }
 
+function buildQueryPreviewItem(params) {
+  const pdf = String(params.get("pdf") || "").trim();
+  if (!pdf) {
+    return null;
+  }
+
+  const id = String(params.get("manga") || "preview").trim() || "preview";
+  const title = String(params.get("title") || "Preview").trim() || "Preview";
+  const thumbnail = String(params.get("thumbnail") || "").trim();
+
+  return {
+    id,
+    title,
+    pdf,
+    thumbnail: thumbnail || FALLBACK_THUMBNAIL,
+    groups: [],
+    genres: [],
+    description: "",
+  };
+}
+
 async function loadContent() {
   try {
     const response = await fetch(CONTENT_DATA_PATH, { cache: "no-store" });
@@ -925,12 +946,18 @@ function wireEvents() {
   });
 
   window.addEventListener("popstate", () => {
-    const mangaId = new URLSearchParams(window.location.search).get("manga");
+    const params = new URLSearchParams(window.location.search);
+    const mangaId = params.get("manga");
+    const fallbackItem = buildQueryPreviewItem(params);
     if (!mangaId) {
+      if (fallbackItem) {
+        void loadPdfForItem(fallbackItem);
+        return;
+      }
       showLibraryView(false);
       return;
     }
-    void openMangaById(mangaId, false);
+    void openMangaById(mangaId, false, fallbackItem);
   });
 
   elements.searchInput?.addEventListener("input", (event) => {
@@ -997,8 +1024,11 @@ async function loadPdfForItem(item) {
   }
 }
 
-async function openMangaById(mangaId, pushState = false) {
-  const item = state.contentItems.find((entry) => entry.id === mangaId);
+async function openMangaById(mangaId, pushState = false, fallbackItem = null) {
+  let item = state.contentItems.find((entry) => entry.id === mangaId);
+  if (!item && fallbackItem && fallbackItem.id === mangaId) {
+    item = fallbackItem;
+  }
   if (!item) {
     showLibraryView(false);
     showLibraryError(`Could not find manga id "${mangaId}" in content.json.`);
@@ -1009,6 +1039,17 @@ async function openMangaById(mangaId, pushState = false) {
   if (pushState) {
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.set("manga", item.id);
+    if (fallbackItem && fallbackItem.id === item.id) {
+      nextUrl.searchParams.set("pdf", fallbackItem.pdf);
+      nextUrl.searchParams.set("title", fallbackItem.title || "Preview");
+      if (fallbackItem.thumbnail) {
+        nextUrl.searchParams.set("thumbnail", fallbackItem.thumbnail);
+      }
+    } else {
+      nextUrl.searchParams.delete("pdf");
+      nextUrl.searchParams.delete("title");
+      nextUrl.searchParams.delete("thumbnail");
+    }
     window.history.pushState({}, "", nextUrl);
   }
 
@@ -1023,13 +1064,19 @@ async function init() {
   renderGenreFilters();
   renderLibrary();
 
-  const mangaId = new URLSearchParams(window.location.search).get("manga");
+  const params = new URLSearchParams(window.location.search);
+  const mangaId = params.get("manga");
+  const fallbackItem = buildQueryPreviewItem(params);
+  if (!mangaId && fallbackItem) {
+    await loadPdfForItem(fallbackItem);
+    return;
+  }
   if (!mangaId) {
     showLibraryView(false);
     return;
   }
 
-  await openMangaById(mangaId, false);
+  await openMangaById(mangaId, false, fallbackItem);
 }
 
 void init();

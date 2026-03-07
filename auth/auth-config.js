@@ -16,6 +16,12 @@ export const appAuthzConfig = {
   getUsersEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-users",
   // Example: https://abc123.execute-api.us-east-1.amazonaws.com/prod/admin/update-user
   updateUserEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/update-user",
+  // Example: https://abc123.execute-api.us-east-1.amazonaws.com/prod/admin/get-content
+  getContentEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-content",
+  // Example: https://abc123.execute-api.us-east-1.amazonaws.com/prod/admin/update-content
+  updateContentEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/update-content",
+  // Example: https://abc123.execute-api.us-east-1.amazonaws.com/prod/admin/get-content-upload-url
+  getContentUploadUrlEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-content-upload-url",
 };
 
 export const authStorageKeys = {
@@ -55,4 +61,15 @@ export function adminApiConfigLooksReady() {
   const getUsersEndpoint = String(appAuthzConfig.getUsersEndpoint || "").trim();
   const updateUserEndpoint = String(appAuthzConfig.updateUserEndpoint || "").trim();
   return getUsersEndpoint.startsWith("https://") && updateUserEndpoint.startsWith("https://");
+}
+
+export function contentApiConfigLooksReady() {
+  const getContentEndpoint = String(appAuthzConfig.getContentEndpoint || "").trim();
+  const updateContentEndpoint = String(appAuthzConfig.updateContentEndpoint || "").trim();
+  return getContentEndpoint.startsWith("https://") && updateContentEndpoint.startsWith("https://");
+}
+
+export function contentUploadApiConfigLooksReady() {
+  const getContentUploadUrlEndpoint = String(appAuthzConfig.getContentUploadUrlEndpoint || "").trim();
+  return getContentUploadUrlEndpoint.startsWith("https://");
 }
