@@ -76,9 +76,9 @@ In `auth-config.js`, set:
 - `appAuthzConfig.validateUserEndpoint`
 - `appAuthzConfig.getUsersEndpoint`
 - `appAuthzConfig.updateUserEndpoint`
-- `appAuthzConfig.getContentEndpoint`
-- `appAuthzConfig.updateContentEndpoint`
-- `appAuthzConfig.getContentUploadUrlEndpoint`
+- `appAuthzConfig.getMangaEndpoint`
+- `appAuthzConfig.updateMangaEndpoint`
+- `appAuthzConfig.getMangaUploadUrlEndpoint`
 
 ## Admin APIs
 
@@ -99,40 +99,40 @@ In `auth-config.js`, set:
   - `status`: `-1`, `0`, `1`
   - `admin`: `0`, `1`
 
-## Content APIs
+## Manga APIs
 
 ### DynamoDB
 
-Table: `Content`
+Table: `Manga` (or legacy `Content`)
 - Partition key: `content_id` (String GUID)
 
 Required env vars:
 - `USERS_TABLE_NAME=Users`
-- `CONTENT_TABLE_NAME=Content`
+- `MANGA_TABLE_NAME=Manga` (or legacy `CONTENT_TABLE_NAME=Content`)
 - `CONTENT_BUCKET=blupetal-prototype`
-- `CONTENT_PDF_PREFIX=content/pdfs`
-- `CONTENT_THUMBNAIL_PREFIX=content/thumbnails`
+- `CONTENT_BUCKET=blupetal-prototype`
+- uploads are organized under `content/manga/{manga_id}-{manga_slug?}/...`
 - `CORS_ALLOW_ORIGIN=*` (or explicit origin)
 
-IAM for `get_content_lambda.py`:
+IAM for `get_manga_lambda.py`:
 - `dynamodb:GetItem` on `Users`
-- `dynamodb:Scan` on `Content`
+- `dynamodb:Scan` on `Manga`
 
-IAM for `update_content_lambda.py`:
+IAM for `update_manga_lambda.py`:
 - `dynamodb:GetItem` on `Users`
-- `dynamodb:GetItem` on `Content`
-- `dynamodb:PutItem` on `Content`
+- `dynamodb:GetItem` on `Manga`
+- `dynamodb:PutItem` on `Manga`
 - `s3:PutObject` on `arn:aws:s3:::blupetal-prototype/content/*`
 
-IAM for `get_content_upload_url_lambda.py`:
+IAM for `get_manga_upload_url_lambda.py`:
 - `dynamodb:GetItem` on `Users`
 - `s3:PutObject` on `arn:aws:s3:::blupetal-prototype/content/*`
 
-### GET `/get-content`
-- Lambda file: `get_content_lambda.py`
+### GET `/get-manga`
+- Lambda file: `get_manga_lambda.py`
 - Access: admin-only
 - Query params:
-  - optional `content_type` (for example `manga`)
+  - optional `manga_type` (or legacy `content_type`)
 - Returned fields (snake_case, from `MangaDataExample.xlsx`):
   - `title`
   - `publisher`
@@ -154,26 +154,26 @@ IAM for `get_content_upload_url_lambda.py`:
   - `bisac`
   - `sales_restriction`
   - `japanese_title`
-  - plus system fields: `content_id`, `content_type`, `pdf_url`, `thumbnail_url`, `created_at`, `updated_at`
+  - plus system fields: `content_id` (alias `manga_id`), `content_type`, `pdf_url`, `cover_url`, `created_at`, `updated_at`
 - Response:
   - `ok`
   - `items`: list of content records
   - `count`
 
-### PUT `/update-content`
-- Lambda file: `update_content_lambda.py`
+### PUT `/update-manga`
+- Lambda file: `update_manga_lambda.py`
 - Access: admin-only
 - Handles only one record per request.
 - Create mode:
-  - omit `content_id`
-  - Lambda auto-generates GUID `content_id`
+  - omit `manga_id` (or `content_id`)
+  - Lambda auto-generates GUID
 - Update mode:
-  - provide `content_id`
+  - provide `manga_id` (or `content_id`)
   - record is replaced/updated using that partition key
 - Body shape (example):
 ```json
 {
-  "content_id": "optional-guid-for-update",
+  "manga_id": "optional-guid-for-update",
   "content_type": "manga",
   "title": "Title",
   "publisher": "Publisher",
@@ -200,7 +200,7 @@ IAM for `get_content_upload_url_lambda.py`:
     "content_type": "application/pdf",
     "base64": "<base64-data>"
   },
-  "thumbnail_file": {
+  "cover_file": {
     "name": "cover.png",
     "content_type": "image/png",
     "base64": "<base64-data>"
@@ -208,9 +208,9 @@ IAM for `get_content_upload_url_lambda.py`:
 }
 ```
 - File behavior:
-  - PDF uploads to `s3://blupetal-prototype/content/pdfs/...`
-  - Thumbnail uploads to `s3://blupetal-prototype/content/thumbnails/...`
-  - If thumbnail is not provided but PDF is uploaded, Lambda attempts first-page thumbnail generation (requires PyMuPDF in Lambda package/layer)
+- Manga cover uploads to `s3://blupetal-prototype/content/manga/{manga_id[-slug]}/series/series-cover.*`
+- MangaContent uploads to `s3://blupetal-prototype/content/manga/{manga_id[-slug]}/volumes/{nnnn}/...` (or `chapters/{nnnn}`)
+  - If cover is not provided but PDF is uploaded, Lambda attempts first-page cover generation (requires PyMuPDF in Lambda package/layer)
 - Strict validation rules:
   - `content_type`: lowercase snake_case, 1-40 chars
   - `title`: required, max 240 chars
@@ -220,22 +220,22 @@ IAM for `get_content_upload_url_lambda.py`:
   - `file_format`: if provided, one of `pdf`, `epub`, `cbz`, `cbr`, `web`
   - `concluded`: if provided, must be `0` or `1` (also accepts true/false style input)
   - `pdf_url`: optional at record creation time (allows staged upload workflow), accepts `s3://` or `http(s)://`
-  - Upload size limits: PDF <= `MAX_PDF_UPLOAD_BYTES` (default 50MB), thumbnail <= `MAX_THUMBNAIL_UPLOAD_BYTES` (default 10MB)
+  - Upload size limits: PDF <= `MAX_PDF_UPLOAD_BYTES` (default 50MB), cover <= `MAX_COVER_UPLOAD_BYTES` (fallback `MAX_THUMBNAIL_UPLOAD_BYTES`, default 10MB)
 - Response:
   - `ok`
   - `item`
-  - `generated_thumbnail`
-  - `thumbnail_required`
+  - `generated_cover`
+  - `cover_required`
   - On validation failure: `field_errors` object keyed by field name
 
-### POST `/get-content-upload-url`
-- Lambda file: `get_content_upload_url_lambda.py`
+### POST `/get-manga-upload-url`
+- Lambda file: `get_manga_upload_url_lambda.py`
 - Access: admin-only
 - Purpose: return presigned S3 URL so frontend uploads large files directly to S3 (recommended)
 - Body:
 ```json
 {
-  "content_id": "optional-guid",
+  "manga_id": "optional-guid",
   "file_kind": "pdf",
   "file_name": "book.pdf",
   "content_type": "application/pdf"
@@ -243,7 +243,7 @@ IAM for `get_content_upload_url_lambda.py`:
 ```
 - Response:
   - `ok`
-  - `content_id`
+  - `manga_id` (alias `content_id`)
   - `upload_url`
   - `s3_url`
   - `file_url` (public HTTPS URL to the same object)
@@ -251,12 +251,218 @@ IAM for `get_content_upload_url_lambda.py`:
 
 ## Best Practice Upload Flow
 
-1. Frontend calls `PUT /update-content` first to create the metadata record.
-2. Frontend calls `POST /get-content-upload-url` for PDF using that `content_id`.
+1. Frontend calls `PUT /update-manga` first to create the metadata record.
+2. Frontend calls `POST /get-manga-upload-url` for PDF using that `manga_id`.
 3. Frontend uploads PDF directly to `upload_url` with `PUT`.
-4. Frontend calls `PUT /update-content` with `content_id` + `pdf_url`.
-5. Frontend optionally repeats upload + update for thumbnail.
+4. Frontend calls `PUT /update-manga` with `manga_id` + `pdf_url`.
+5. Frontend optionally repeats upload + update for cover.
 
 ## S3 CORS (required for browser direct upload)
 
 Bucket `blupetal-prototype` needs CORS allowing your app origin(s), `PUT`, and headers including `Content-Type`.
+
+## Manga + MangaContent Scaffold (March 11, 2026)
+
+### Recommended folder layout
+
+```text
+api/
+  handlers/
+    manga_handler.py
+    manga_content_handler.py
+    manga_upload_url_handler.py
+    manga_content_upload_url_handler.py
+  repositories/
+    manga_repository.py
+    manga_content_repository.py
+  models/
+    manga.py
+    manga_content.py
+  validators/
+    manga_validator.py
+    manga_content_validator.py
+  utils/
+    api_gateway.py
+    responses.py
+    content_key.py
+    s3_uploads.py
+  api_router_lambda.py
+```
+
+### Environment variables
+
+- `MANGA_TABLE_NAME=Manga`
+- `MANGA_CONTENT_TABLE_NAME=MangaContent`
+- `CONTENT_BUCKET=blupetal-prototype`
+- `UPLOAD_URL_TTL_SECONDS=900`
+- `CONTENT_PUBLIC_BASE_URL=https://cdn.example.com` (optional)
+- `CORS_ALLOW_ORIGIN=*` (or use `CORS_ALLOW_ORIGINS`)
+
+### Lambda packaging pattern
+
+Use one Lambda with one handler:
+
+- `api_router_lambda.lambda_handler`
+
+Deploy the full `api/` folder contents in that Lambda package so shared imports resolve.
+
+### Recommended pattern: one router Lambda
+
+To reduce operational overhead, use one Lambda for all API routes:
+
+- Lambda handler: `api_router_lambda.lambda_handler`
+- File: [api_router_lambda.py](c:/Users/jaycm/Projects/MangaHub/api/api_router_lambda.py)
+- Router: [api_router_handler.py](c:/Users/jaycm/Projects/MangaHub/api/handlers/api_router_handler.py)
+
+In API Gateway, point each route integration to that same Lambda.
+You still keep separate routes in API Gateway, but no longer manage one Lambda per endpoint.
+
+Supported route map in the router:
+
+- `POST /auth/validate`
+- `GET /get-users`
+- `PUT /update-user`
+- `GET /manga`
+- `PUT /manga`
+- `GET /get-manga` (legacy alias)
+- `PUT /update-manga` (legacy alias)
+- `POST /get-manga-upload-url`
+- `POST /manga/upload-url` (alias)
+- `GET /manga-content`
+- `PUT /manga-content`
+- `GET /get-manga-content` (legacy alias)
+- `PUT /update-manga-content` (legacy alias)
+- `POST /get-manga-content-upload-url`
+- `POST /manga-content/upload-url` (alias)
+
+Single-endpoint thin entrypoint files were removed; routing is now centralized in `api_router_handler.py`.
+
+### Fast local deploy script
+
+Use this helper script to deploy code updates to the same router Lambda without manually zipping:
+
+- Script: [deploy-api-router.ps1](c:/Users/jaycm/Projects/MangaHub/scripts/deploy-api-router.ps1)
+
+From repo root:
+
+```powershell
+.\scripts\deploy-api-router.ps1 -FunctionName mangahub-api-router -Region us-west-2
+```
+
+Optional flags:
+
+- `-Profile my-aws-profile`
+- `-Publish`
+- `-NoWait`
+- `-ApiDir c:\path\to\custom\api`
+
+### Endpoint behavior
+
+- `GET /manga`
+  - Optional `manga_id` query/path param.
+  - No `manga_id`: returns all manga (scan isolated in repository layer).
+- `PUT /manga`
+  - Requires `manga_id`.
+  - Updates only editable Manga attributes.
+  - Returns `404` if `manga_id` does not exist.
+- `POST /manga` (or `POST /create-manga`)
+  - Creates a Manga row.
+  - Returns `409` if `manga_id` already exists.
+- `DELETE /manga` (or `DELETE /delete-manga`)
+  - Deletes a Manga row by `manga_id`.
+- `GET /manga-content`
+  - Requires `manga_id`.
+  - Optional `content_key` to fetch one child row.
+  - Without `content_key`, uses DynamoDB `Query` by `manga_id`.
+- `PUT /manga-content`
+  - Requires `manga_id` + `content_key`.
+  - Updates only editable MangaContent attributes.
+  - Returns `404` if item does not exist.
+- `POST /manga-content` (or `POST /create-manga-content`)
+  - Creates a MangaContent row.
+  - Returns `409` if key already exists.
+- `DELETE /manga-content` (or `DELETE /delete-manga-content`)
+  - Deletes a MangaContent row by `manga_id` + `content_key`.
+- `POST /get-manga-upload-url`
+  - Manga cover upload URL (`file_kind` must be `cover`).
+- `POST /get-manga-content-upload-url`
+  - MangaContent upload URL (`file_kind` is `cover` or `file`).
+
+### `content_key` helper
+
+Use `utils/content_key.py`:
+
+- `generate_content_key("volume", 1)` -> `VOLUME#0001`
+- `generate_content_key("chapter", 7)` -> `CHAPTER#0007`
+
+### Example requests
+
+`PUT /manga`
+
+```json
+{
+  "manga_id": "8f3a1d2c-1234-4567-8910-abcdef123456",
+  "title": "Absolute Obedience ~If you don’t obey me~",
+  "publisher": "Example Publisher",
+  "series": "Absolute Obedience",
+  "age_rating": "Mature",
+  "synopsis": "Example synopsis",
+  "keywords": ["Romance", "Yaoi", "Manga"],
+  "copyright": "© Example",
+  "bisac": "COMICS & GRAPHIC NOVELS / Manga / Romance",
+  "sales_restriction": "18+",
+  "japanese_title": "Japanese Title Here",
+  "cover_url": "https://cdn.example.com/manga/abc123/series-cover.jpg"
+}
+```
+
+`PUT /manga-content`
+
+```json
+{
+  "manga_id": "8f3a1d2c-1234-4567-8910-abcdef123456",
+  "content_key": "VOLUME#0001",
+  "content_type": "volume",
+  "sequence_number": 1,
+  "title": "Absolute Obedience Volume 1",
+  "external_content_id": "BT000076098300100101",
+  "synopsis": "Volume synopsis",
+  "author": "Example Author",
+  "price": "9.99",
+  "file_format": "ePDF",
+  "cover_url": "https://cdn.example.com/manga/abc123/volumes/0001/cover.jpg",
+  "file_url": "https://cdn.example.com/manga/abc123/volumes/0001/book.pdf"
+}
+```
+
+`POST /get-manga-content-upload-url`
+
+```json
+{
+  "manga_id": "8f3a1d2c-1234-4567-8910-abcdef123456",
+  "content_key": "VOLUME#0001",
+  "file_kind": "file",
+  "file_name": "book.pdf",
+  "content_type": "application/pdf"
+}
+```
+
+### Response shape
+
+Success:
+
+```json
+{
+  "success": true,
+  "data": {}
+}
+```
+
+Error:
+
+```json
+{
+  "success": false,
+  "error": "Message here"
+}
+```

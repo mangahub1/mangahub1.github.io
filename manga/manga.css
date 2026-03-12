@@ -357,7 +357,7 @@ body {
   color: inherit;
   padding: 0.8rem 0.85rem;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 64px 1fr auto;
   align-items: center;
   gap: 0.8rem;
 }
@@ -366,11 +366,17 @@ body {
   background: #ffffff;
 }
 
-.volume-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--pink);
+.volume-cover {
+  width: 64px;
+  height: 86px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #d5dbe5;
+  background: #eceff4;
+}
+
+.volume-text {
+  min-width: 0;
 }
 
 .volume-label {
@@ -381,6 +387,13 @@ body {
   margin-top: 0.15rem;
   color: #828996;
   font-size: 0.9rem;
+}
+
+.volume-synopsis {
+  margin: 0.45rem 0 0;
+  color: #3f4551;
+  font-size: 0.9rem;
+  line-height: 1.35;
 }
 
 .volume-chevron {
@@ -396,5 +409,14 @@ body {
 
   .manga-left {
     max-width: 340px;
+  }
+
+  .volume-item {
+    grid-template-columns: 56px 1fr auto;
+  }
+
+  .volume-cover {
+    width: 56px;
+    height: 76px;
   }
 }

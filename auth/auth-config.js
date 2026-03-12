@@ -1,7 +1,5 @@
 export const cognitoAuthConfig = {
-  // Example: https://your-domain.auth.us-east-1.amazoncognito.com
   domain: "https://us-east-1xapalpoxy.auth.us-east-1.amazoncognito.com",
-  // Example: 4m1e5ampleclientid123456
   clientId: "4kouds34d4k125an6q7pd6gbmo",
   scopes: ["openid", "email", "profile"],
   responseType: "code",
@@ -10,18 +8,16 @@ export const cognitoAuthConfig = {
 };
 
 export const appAuthzConfig = {
-  // Example: https://abc123.execute-api.us-east-1.amazonaws.com/prod/auth/validate
-  validateUserEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/validate-user",
-  // Example: https://abc123.execute-api.us-east-1.amazonaws.com/prod/admin/get-users
+  validateUserEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/auth/validate",
   getUsersEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-users",
-  // Example: https://abc123.execute-api.us-east-1.amazonaws.com/prod/admin/update-user
   updateUserEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/update-user",
-  // Example: https://abc123.execute-api.us-east-1.amazonaws.com/prod/admin/get-content
-  getContentEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-content",
-  // Example: https://abc123.execute-api.us-east-1.amazonaws.com/prod/admin/update-content
-  updateContentEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/update-content",
-  // Example: https://abc123.execute-api.us-east-1.amazonaws.com/prod/admin/get-content-upload-url
-  getContentUploadUrlEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-content-upload-url",
+  getMangaEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-manga",
+  updateMangaEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/update-manga",
+  getMangaUploadUrlEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-manga-upload-url",
+  getMangaContentEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-manga-content",
+  updateMangaContentEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/update-manga-content",
+  getMangaContentUploadUrlEndpoint:
+    "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-manga-content-upload-url",
 };
 
 export const authStorageKeys = {
@@ -63,13 +59,24 @@ export function adminApiConfigLooksReady() {
   return getUsersEndpoint.startsWith("https://") && updateUserEndpoint.startsWith("https://");
 }
 
-export function contentApiConfigLooksReady() {
-  const getContentEndpoint = String(appAuthzConfig.getContentEndpoint || "").trim();
-  const updateContentEndpoint = String(appAuthzConfig.updateContentEndpoint || "").trim();
-  return getContentEndpoint.startsWith("https://") && updateContentEndpoint.startsWith("https://");
+export function mangaApiConfigLooksReady() {
+  const getEndpoint = String(appAuthzConfig.getMangaEndpoint || "").trim();
+  const updateEndpoint = String(appAuthzConfig.updateMangaEndpoint || "").trim();
+  return getEndpoint.startsWith("https://") && updateEndpoint.startsWith("https://");
 }
 
-export function contentUploadApiConfigLooksReady() {
-  const getContentUploadUrlEndpoint = String(appAuthzConfig.getContentUploadUrlEndpoint || "").trim();
-  return getContentUploadUrlEndpoint.startsWith("https://");
+export function mangaUploadApiConfigLooksReady() {
+  const uploadEndpoint = String(appAuthzConfig.getMangaUploadUrlEndpoint || "").trim();
+  return uploadEndpoint.startsWith("https://");
+}
+
+export function mangaContentApiConfigLooksReady() {
+  const getEndpoint = String(appAuthzConfig.getMangaContentEndpoint || "").trim();
+  const updateEndpoint = String(appAuthzConfig.updateMangaContentEndpoint || "").trim();
+  return getEndpoint.startsWith("https://") && updateEndpoint.startsWith("https://");
+}
+
+export function mangaContentUploadApiConfigLooksReady() {
+  const uploadEndpoint = String(appAuthzConfig.getMangaContentUploadUrlEndpoint || "").trim();
+  return uploadEndpoint.startsWith("https://");
 }

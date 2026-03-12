@@ -5,7 +5,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
 
 const CONTENT_DATA_PATH = "./content.json";
-const FALLBACK_THUMBNAIL = "./content/thumbnails/placeholder.svg";
+const FALLBACK_COVER = "./content/manga/placeholder.svg";
 const SINGLE_PAGE_BREAKPOINT = 900;
 const MAX_ZOOM = 2;
 
@@ -126,7 +126,7 @@ function sanitizeContentItem(item) {
   const id = String(item.id || "").trim();
   const title = String(item.title || "").trim();
   const pdf = String(item.pdf || "").trim();
-  const thumbnail = String(item.thumbnail || "").trim();
+  const cover = String(item.cover || item.thumbnail || "").trim();
   const groups = Array.isArray(item.groups)
     ? item.groups
         .map((group) => String(group || "").trim())
@@ -146,7 +146,7 @@ function sanitizeContentItem(item) {
     id,
     title,
     pdf,
-    thumbnail: thumbnail || FALLBACK_THUMBNAIL,
+    cover: cover || FALLBACK_COVER,
     groups,
     genres,
     description: String(item.description || "").trim(),
@@ -175,13 +175,13 @@ function buildQueryPreviewItem(params) {
 
   const id = String(params.get("manga") || "preview").trim() || "preview";
   const title = String(params.get("title") || "Preview").trim() || "Preview";
-  const thumbnail = String(params.get("thumbnail") || "").trim();
+  const cover = String(params.get("cover") || params.get("thumbnail") || "").trim();
 
   return {
     id,
     title,
     pdf,
-    thumbnail: thumbnail || FALLBACK_THUMBNAIL,
+    cover: cover || FALLBACK_COVER,
     groups: [],
     genres: [],
     description: "",
@@ -249,12 +249,12 @@ function createMangaCard(item) {
 
   const cover = document.createElement("img");
   cover.className = "manga-thumb";
-  cover.src = item.thumbnail;
+  cover.src = item.cover;
   cover.alt = `${item.title} cover`;
   cover.loading = "lazy";
   cover.addEventListener("error", () => {
-    if (cover.src !== new URL(FALLBACK_THUMBNAIL, window.location.href).href) {
-      cover.src = FALLBACK_THUMBNAIL;
+    if (cover.src !== new URL(FALLBACK_COVER, window.location.href).href) {
+      cover.src = FALLBACK_COVER;
     }
   });
 
@@ -1042,12 +1042,13 @@ async function openMangaById(mangaId, pushState = false, fallbackItem = null) {
     if (fallbackItem && fallbackItem.id === item.id) {
       nextUrl.searchParams.set("pdf", fallbackItem.pdf);
       nextUrl.searchParams.set("title", fallbackItem.title || "Preview");
-      if (fallbackItem.thumbnail) {
-        nextUrl.searchParams.set("thumbnail", fallbackItem.thumbnail);
+      if (fallbackItem.cover) {
+        nextUrl.searchParams.set("cover", fallbackItem.cover);
       }
     } else {
       nextUrl.searchParams.delete("pdf");
       nextUrl.searchParams.delete("title");
+      nextUrl.searchParams.delete("cover");
       nextUrl.searchParams.delete("thumbnail");
     }
     window.history.pushState({}, "", nextUrl);

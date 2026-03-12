@@ -4,15 +4,19 @@ Flow:
 - `index.html`: BluPetal landing page with a `Log In` button.
 - `login.html`: mock Google account chooser.
 - `library.html`: manga library shelves.
-- `manga.html`: manga detail page (cover, description, metadata, volume list).
+- `manga/manga.html`: manga detail page (cover, description, metadata, volume list).
+- `manga/admin/admin-manga.html`: parent-child admin page for Manga and MangaContent.
 - `library.html?manga=<id>`: PDF reader experience.
 
-1) Put PDF files into `/content/pdfs/`.
+1) Keep manga assets under `/content/manga/{manga_id}-{slug}/`:
+   - series cover: `/series/series-cover.png`
+   - volume files: `/volumes/<nnn>/volume.pdf` and `/volumes/<nnn>/volume-cover.png`
 2) Update `content.json` with one entry per manga:
    - `id`: unique key used in URL query (`?manga=<id>`)
+   - `manga_id`: stable parent ID used by DynamoDB and content folder naming
    - `title`: display title for library tile
    - `pdf`: relative path to the PDF
-   - `thumbnail`: relative path to cover image (placeholders are in `/content/thumbnails/`)
+   - `cover`: relative path to cover image (placeholder is `/content/manga/placeholder.svg`)
    - `genres`: array shown under the title (for example `["Boys' Love", "Drama"]`)
    - `groups`: array of section ids so a manga can appear in multiple shelves
    - optional `author`, `ageRating`, `status`, `rating`, `ratingCount`
@@ -30,6 +34,9 @@ Flow:
 Notes:
 - Reader state is shareable via `library.html?manga=<id>`.
 - Workflow is now: Library tile -> `manga.html?manga=<id>` -> select volume -> reader.
+- To seed DynamoDB tables from `content.json`:
+  - dry run: `python scripts/seed_manga_from_content.py`
+  - apply: `python scripts/seed_manga_from_content.py --apply --region us-east-1`
 
 Cognito + authorization flow:
 - Update `auth-config.js` with:

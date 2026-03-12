@@ -6,7 +6,7 @@ import {
 } from "../auth/auth-session.js";
 
 const CONTENT_DATA_PATH = "../content.json";
-const FALLBACK_THUMBNAIL = "../content/thumbnails/placeholder.svg";
+const FALLBACK_COVER = "../content/manga/placeholder.svg";
 
 const elements = {
   mangaPage: document.getElementById("mangaPage"),
@@ -100,6 +100,8 @@ function normalizeVolumes(item) {
       title: String(volume?.title || `Volume ${index + 1}`),
       date: String(volume?.date || ""),
       pdf: String(volume?.pdf || item.pdf),
+      cover: String(volume?.cover || volume?.thumbnail || item.cover || item.thumbnail || ""),
+      synopsis: String(volume?.synopsis || "").trim(),
     }));
   }
 
@@ -117,6 +119,8 @@ function normalizeVolumes(item) {
     title: `Volume ${index + 1}`,
     date,
     pdf: item.pdf,
+    cover: String(item.cover || item.thumbnail || ""),
+    synopsis: "",
   }));
 }
 
@@ -153,10 +157,10 @@ function render(item) {
   elements.mangaTitle.textContent = item.title || "Untitled Manga";
   document.title = `${item.title || "Manga"} - BluPetal`;
 
-  elements.mangaCover.src = resolveContentAssetPath(item.thumbnail) || FALLBACK_THUMBNAIL;
+  elements.mangaCover.src = resolveContentAssetPath(item.cover || item.thumbnail) || FALLBACK_COVER;
   elements.mangaCover.alt = `${item.title || "Manga"} cover`;
   elements.mangaCover.addEventListener("error", () => {
-    elements.mangaCover.src = FALLBACK_THUMBNAIL;
+    elements.mangaCover.src = FALLBACK_COVER;
   });
 
   elements.mangaDescription.innerHTML = "";
@@ -191,23 +195,34 @@ function render(item) {
     itemLink.href = buildReaderUrl(item, volume);
     itemLink.setAttribute("aria-label", `Open ${volume.title}`);
 
-    const dot = document.createElement("span");
-    dot.className = "volume-dot";
+    const volumeCover = document.createElement("img");
+    volumeCover.className = "volume-cover";
+    volumeCover.loading = "lazy";
+    volumeCover.decoding = "async";
+    volumeCover.src = resolveContentAssetPath(volume.cover) || FALLBACK_COVER;
+    volumeCover.alt = `${volume.title} cover`;
+    volumeCover.addEventListener("error", () => {
+      volumeCover.src = FALLBACK_COVER;
+    });
 
     const textWrap = document.createElement("div");
+    textWrap.className = "volume-text";
     const title = document.createElement("div");
     title.className = "volume-label";
     title.textContent = volume.title;
     const date = document.createElement("div");
     date.className = "volume-date";
     date.textContent = volume.date || "Coming soon";
-    textWrap.append(title, date);
+    const synopsis = document.createElement("p");
+    synopsis.className = "volume-synopsis";
+    synopsis.textContent = volume.synopsis || "Synopsis coming soon.";
+    textWrap.append(title, date, synopsis);
 
     const chev = document.createElement("span");
     chev.className = "volume-chevron";
     chev.textContent = "⌄";
 
-    itemLink.append(dot, textWrap, chev);
+    itemLink.append(volumeCover, textWrap, chev);
     elements.volumeList.appendChild(itemLink);
   });
 

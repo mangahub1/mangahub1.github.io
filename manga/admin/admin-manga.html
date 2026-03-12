@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BluPetal Admin - Manga</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="../../assets/favicon.png" />
+  <link rel="stylesheet" href="../../styles.css" />
+  <link rel="stylesheet" href="./admin-manga.css" />
+</head>
+<body class="library-active admin-page">
+  <header class="library-topbar">
+    <div class="library-nav-left">
+      <a href="../../library.html" class="library-brand" aria-label="BluPetal home">
+        <img src="../../assets/logo-header.png" alt="BluPetal" />
+      </a>
+      <nav class="library-nav-links" aria-label="Primary">
+        <a href="../../users/admin-users.html">User Accounts</a>
+        <a href="./admin-manga.html" aria-current="page">Manga</a>
+      </nav>
+    </div>
+    <div class="library-nav-right">
+      <details class="settings-menu">
+        <summary class="library-icon-btn settings-trigger" aria-label="Account settings">
+          <img id="accountAvatar" class="account-avatar hidden" src="" alt="Account avatar" referrerpolicy="no-referrer" decoding="async" />
+          <svg class="library-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="8.1" r="3.1"></circle>
+            <path d="M5.4 19.2a6.6 6.6 0 0 1 13.2 0"></path>
+          </svg>
+        </summary>
+        <nav class="settings-dropdown" aria-label="Account menu">
+          <div id="welcomeMessage" class="settings-welcome hidden"></div>
+          <div class="settings-group" aria-label="Admin portal">
+            <div class="settings-group-label">Admin Portal</div>
+            <a href="../../users/admin-users.html" class="settings-item settings-subitem">User Accounts</a>
+            <a href="./admin-manga.html" class="settings-item settings-subitem">Manga</a>
+          </div>
+          <a href="../../index.html" class="settings-item signout">
+            <svg class="settings-item-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.75C2 1.784 2.784 1 3.75 1h2.5a.75.75 0 0 1 0 1.5h-2.5a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h2.5a.75.75 0 0 1 0 1.5h-2.5A1.75 1.75 0 0 1 2 13.25Zm10.44 4.5-1.97-1.97a.749.749 0 0 1 .326-1.275.749.749 0 0 1 .734.215l3.25 3.25a.75.75 0 0 1 0 1.06l-3.25 3.25a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734l1.97-1.97H6.75a.75.75 0 0 1 0-1.5Z"></path></svg>
+            <span>Sign out</span>
+          </a>
+        </nav>
+      </details>
+    </div>
+  </header>
+
+  <main class="admin-shell">
+    <section class="admin-header">
+      <h1>Manga Admin</h1>
+      <p>Manage Manga parents and child MangaContent volumes/chapters.</p>
+    </section>
+
+    <section id="adminError" class="admin-banner admin-banner-error hidden" role="alert"></section>
+    <section id="adminSuccess" class="admin-banner admin-banner-success hidden" role="status"></section>
+
+    <section class="admin-controls">
+      <label class="admin-control admin-control-search">
+        <span>Search</span>
+        <input id="searchInput" type="search" placeholder="Find by manga_id, title, publisher" />
+      </label>
+      <button id="refreshBtn" type="button" class="admin-btn admin-btn-secondary">Refresh</button>
+      <button id="addMangaBtn" type="button" class="admin-btn">Add Manga</button>
+    </section>
+
+    <section class="admin-grid-shell">
+      <div class="admin-grid-meta"><span id="resultsCount">0 records</span></div>
+      <div class="admin-grid-wrap">
+        <table class="admin-grid">
+          <thead>
+            <tr>
+              <th>Manga ID</th>
+              <th>Title</th>
+              <th>Publisher</th>
+              <th>Series</th>
+              <th>Child Content</th>
+              <th class="col-action">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="mangaTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <section id="mangaModal" class="modal-shell hidden" aria-hidden="true">
+    <div class="modal-backdrop" data-close-manga-modal="true"></div>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="mangaModalTitle">
+      <div class="modal-head">
+        <h2 id="mangaModalTitle">Edit Manga</h2>
+        <button id="closeMangaModalBtn" type="button" class="modal-close" aria-label="Close">X</button>
+      </div>
+      <section id="mangaModalError" class="admin-banner admin-banner-error hidden" role="alert"></section>
+      <form id="mangaForm" class="admin-form">
+        <div class="form-grid">
+          <label><span>Manga ID</span><input id="mangaIdInput" name="manga_id" type="text" required /></label>
+          <label><span>Title</span><input id="titleInput" name="title" type="text" /></label>
+          <label><span>Publisher</span><input id="publisherInput" name="publisher" type="text" /></label>
+          <label><span>Series</span><input id="seriesInput" name="series" type="text" /></label>
+          <label><span>Age Rating</span><input id="ageRatingInput" name="age_rating" type="text" /></label>
+          <label><span>Japanese Title</span><input id="japaneseTitleInput" name="japanese_title" type="text" /></label>
+          <label class="span-2"><span>Cover URL</span><input id="coverUrlInput" name="cover_url" type="text" /></label>
+          <label class="span-2"><span>Keywords (comma separated)</span><input id="keywordsInput" name="keywords" type="text" /></label>
+          <label class="span-2"><span>Synopsis</span><textarea id="synopsisInput" name="synopsis" rows="3"></textarea></label>
+          <label><span>BISAC</span><input id="bisacInput" name="bisac" type="text" /></label>
+          <label><span>Sales Restriction</span><input id="salesRestrictionInput" name="sales_restriction" type="text" /></label>
+          <label class="span-2"><span>Copyright</span><input id="copyrightInput" name="copyright" type="text" /></label>
+        </div>
+        <div class="form-actions">
+          <button id="cancelMangaBtn" type="button" class="admin-btn admin-btn-secondary">Cancel</button>
+          <button id="saveMangaBtn" type="submit" class="admin-btn">Save Manga</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section id="contentDrawer" class="drawer-shell hidden" aria-hidden="true">
+    <div class="drawer-backdrop" data-close-drawer="true"></div>
+    <div class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+      <div class="drawer-head">
+        <div>
+          <h2 id="drawerTitle">Manga Content</h2>
+          <p id="drawerSubtitle"></p>
+        </div>
+        <button id="closeDrawerBtn" type="button" class="modal-close" aria-label="Close">X</button>
+      </div>
+      <section id="contentError" class="admin-banner admin-banner-error hidden" role="alert"></section>
+      <section class="drawer-controls">
+        <button id="addContentBtn" type="button" class="admin-btn">Add Content</button>
+      </section>
+      <div class="admin-grid-wrap">
+        <table class="admin-grid child-grid">
+          <thead>
+            <tr>
+              <th>Content Key</th>
+              <th>Type</th>
+              <th>Seq</th>
+              <th>Title</th>
+              <th>Format</th>
+              <th class="col-action">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="contentTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="contentModal" class="modal-shell hidden" aria-hidden="true">
+    <div class="modal-backdrop" data-close-content-modal="true"></div>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="contentModalTitle">
+      <div class="modal-head">
+        <h2 id="contentModalTitle">Edit MangaContent</h2>
+        <button id="closeContentModalBtn" type="button" class="modal-close" aria-label="Close">X</button>
+      </div>
+      <section id="contentModalError" class="admin-banner admin-banner-error hidden" role="alert"></section>
+      <form id="contentForm" class="admin-form">
+        <div class="form-grid">
+          <label><span>Manga ID</span><input id="contentMangaIdInput" name="manga_id" type="text" required readonly /></label>
+          <label><span>Content Key</span><input id="contentKeyInput" name="content_key" type="text" required /></label>
+          <label><span>Type</span><input id="contentTypeInput" name="content_type" type="text" placeholder="volume or chapter" /></label>
+          <label><span>Sequence Number</span><input id="sequenceNumberInput" name="sequence_number" type="number" min="1" /></label>
+          <label class="span-2"><span>Title</span><input id="contentTitleInput" name="title" type="text" /></label>
+          <label><span>External Content ID</span><input id="externalContentIdInput" name="external_content_id" type="text" /></label>
+          <label><span>Author</span><input id="contentAuthorInput" name="author" type="text" /></label>
+          <label><span>Price</span><input id="priceInput" name="price" type="text" /></label>
+          <label><span>File Format</span><input id="fileFormatInput" name="file_format" type="text" /></label>
+          <label class="span-2"><span>Cover URL</span><input id="contentCoverUrlInput" name="cover_url" type="text" /></label>
+          <label class="span-2"><span>File URL</span><input id="fileUrlInput" name="file_url" type="text" /></label>
+          <label class="span-2"><span>Synopsis</span><textarea id="contentSynopsisInput" name="synopsis" rows="3"></textarea></label>
+        </div>
+        <div class="form-actions">
+          <button id="cancelContentBtn" type="button" class="admin-btn admin-btn-secondary">Cancel</button>
+          <button id="saveContentBtn" type="submit" class="admin-btn">Save Content</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <script type="module" src="../../auth/auth-guard.js"></script>
+  <script type="module" src="./admin-manga.js"></script>
+</body>
+</html>
