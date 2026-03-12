@@ -1,7 +1,10 @@
 import {
   appAuthzConfig,
+  appUploadConfig,
   mangaApiConfigLooksReady,
   mangaContentApiConfigLooksReady,
+  mangaContentUploadApiConfigLooksReady,
+  mangaUploadApiConfigLooksReady,
 } from "../../auth/auth-config.js";
 import {
   clearAuthSession,
@@ -17,13 +20,24 @@ const state = {
   mangaItems: [],
   filteredMangaItems: [],
   contentItems: [],
-  contentCountByMangaId: new Map(),
   activeManga: null,
   mangaMode: "create",
   contentMode: "create",
   editingManga: null,
   editingContent: null,
+  selectedCoverImageFile: null,
+  coverPreviewObjectUrl: null,
+  selectedContentCoverImageFile: null,
+  contentCoverPreviewObjectUrl: null,
+  selectedContentFile: null,
+  inlineContentRow: null,
+  inlineContentHost: null,
 };
+
+const COVER_IMAGE_MAX_UPLOAD_BYTES = Number(appUploadConfig?.mangaCoverMaxUploadBytes || 3 * 1024 * 1024);
+const CONTENT_COVER_IMAGE_MAX_UPLOAD_BYTES = Number(
+  appUploadConfig?.mangaContentCoverMaxUploadBytes || COVER_IMAGE_MAX_UPLOAD_BYTES
+);
 
 const elements = {
   error: document.getElementById("adminError"),
@@ -31,8 +45,8 @@ const elements = {
   searchInput: document.getElementById("searchInput"),
   refreshBtn: document.getElementById("refreshBtn"),
   addMangaBtn: document.getElementById("addMangaBtn"),
+  adminGridShell: document.getElementById("adminGridShell"),
   mangaTableBody: document.getElementById("mangaTableBody"),
-  resultsCount: document.getElementById("resultsCount"),
   signoutLinks: document.querySelectorAll(".settings-item.signout"),
   accountAvatar: document.getElementById("accountAvatar"),
   welcomeMessage: document.getElementById("welcomeMessage"),
@@ -51,17 +65,20 @@ const elements = {
   seriesInput: document.getElementById("seriesInput"),
   ageRatingInput: document.getElementById("ageRatingInput"),
   japaneseTitleInput: document.getElementById("japaneseTitleInput"),
-  coverUrlInput: document.getElementById("coverUrlInput"),
+  coverImageInput: document.getElementById("coverImageInput"),
+  coverImageFileName: document.getElementById("coverImageFileName"),
+  coverImageClearBtn: document.getElementById("coverImageClearBtn"),
+  coverImagePreview: document.getElementById("coverImagePreview"),
+  coverImagePlaceholder: document.getElementById("coverImagePlaceholder"),
+  coverImageCurrentUrl: document.getElementById("coverImageCurrentUrl"),
   keywordsInput: document.getElementById("keywordsInput"),
   synopsisInput: document.getElementById("synopsisInput"),
   bisacInput: document.getElementById("bisacInput"),
   salesRestrictionInput: document.getElementById("salesRestrictionInput"),
   copyrightInput: document.getElementById("copyrightInput"),
 
-  contentDrawer: document.getElementById("contentDrawer"),
-  drawerTitle: document.getElementById("drawerTitle"),
-  drawerSubtitle: document.getElementById("drawerSubtitle"),
-  closeDrawerBtn: document.getElementById("closeDrawerBtn"),
+  contentPanelStaging: document.getElementById("contentPanelStaging"),
+  contentPanel: document.getElementById("contentPanel"),
   contentError: document.getElementById("contentError"),
   addContentBtn: document.getElementById("addContentBtn"),
   contentTableBody: document.getElementById("contentTableBody"),
@@ -85,6 +102,16 @@ const elements = {
   contentCoverUrlInput: document.getElementById("contentCoverUrlInput"),
   fileUrlInput: document.getElementById("fileUrlInput"),
   contentSynopsisInput: document.getElementById("contentSynopsisInput"),
+  contentCoverImageInput: document.getElementById("contentCoverImageInput"),
+  contentCoverImageFileName: document.getElementById("contentCoverImageFileName"),
+  contentCoverImageClearBtn: document.getElementById("contentCoverImageClearBtn"),
+  contentCoverImagePreview: document.getElementById("contentCoverImagePreview"),
+  contentCoverImagePlaceholder: document.getElementById("contentCoverImagePlaceholder"),
+  contentCoverImageCurrentUrl: document.getElementById("contentCoverImageCurrentUrl"),
+  contentFileInput: document.getElementById("contentFileInput"),
+  contentFileName: document.getElementById("contentFileName"),
+  contentFileClearBtn: document.getElementById("contentFileClearBtn"),
+  contentFileCurrentUrl: document.getElementById("contentFileCurrentUrl"),
 };
 
 function redirectTo(path) {
@@ -127,12 +154,12 @@ function clearContentModalError() {
   elements.contentModalError.classList.add("hidden");
 }
 
-function showContentDrawerError(message) {
+function showContentPanelError(message) {
   elements.contentError.textContent = message;
   elements.contentError.classList.remove("hidden");
 }
 
-function clearContentDrawerError() {
+function clearContentPanelError() {
   elements.contentError.textContent = "";
   elements.contentError.classList.add("hidden");
 }
@@ -144,6 +171,48 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function renderCoverThumb(url, label) {
+  const coverUrl = String(url || "").trim();
+  const altText = escapeHtml(`${String(label || "Manga").trim() || "Manga"} cover`);
+  const fallback = `
+    <div class="cover-thumb-fallback" aria-hidden="true">
+      <span class="cover-thumb-fallback-icon"></span>
+      <span class="cover-thumb-fallback-text">No Cover</span>
+    </div>
+  `;
+  if (!coverUrl) {
+    return `<div class="cover-thumb is-missing">${fallback}</div>`;
+  }
+  return `
+    <div class="cover-thumb">
+      <img class="cover-thumb-img" data-cover-thumb="true" src="${escapeHtml(coverUrl)}" alt="${altText}" loading="lazy" decoding="async" />
+      ${fallback}
+    </div>
+  `;
+}
+
+function bindCoverThumbFallbacks(scopeElement) {
+  if (!(scopeElement instanceof Element)) return;
+  const images = scopeElement.querySelectorAll('img[data-cover-thumb="true"]:not([data-cover-bound="true"])');
+  images.forEach((img) => {
+    img.setAttribute("data-cover-bound", "true");
+    img.addEventListener("load", () => {
+      img.classList.add("is-ready");
+      const frame = img.closest(".cover-thumb");
+      frame?.classList.remove("is-missing");
+    });
+    img.addEventListener(
+      "error",
+      () => {
+        const frame = img.closest(".cover-thumb");
+        frame?.classList.add("is-missing");
+        img.removeAttribute("src");
+      },
+      { once: true }
+    );
+  });
 }
 
 function ensureAdminSession() {
@@ -210,7 +279,7 @@ async function requestJson(url, options) {
     body = { raw };
   }
   if (!response.ok) {
-    throw new Error(body?.message || `Request failed (${response.status})`);
+    throw new Error(body?.message || body?.error || `Request failed (${response.status})`);
   }
   return body;
 }
@@ -220,6 +289,163 @@ function jsonHeaders() {
     "Content-Type": "application/json",
     Authorization: `Bearer ${state.session.accessToken}`,
   };
+}
+
+function responseData(body) {
+  if (!body || typeof body !== "object") return {};
+  if ("data" in body && typeof body.data === "object" && body.data) {
+    return body.data;
+  }
+  return body;
+}
+
+function updateCoverImageUi(previewUrl, currentUrl) {
+  const hasPreview = Boolean(previewUrl);
+  elements.coverImagePreview.src = hasPreview ? previewUrl : "";
+  elements.coverImagePreview.classList.toggle("hidden", !hasPreview);
+  elements.coverImagePlaceholder.classList.toggle("hidden", hasPreview);
+
+  const normalizedCurrentUrl = String(currentUrl || "").trim();
+  if (!normalizedCurrentUrl) {
+    elements.coverImageCurrentUrl.textContent = "";
+    elements.coverImageCurrentUrl.classList.add("hidden");
+    return;
+  }
+
+  elements.coverImageCurrentUrl.textContent = `Current image: ${normalizedCurrentUrl}`;
+  elements.coverImageCurrentUrl.classList.remove("hidden");
+}
+
+function setCoverClearVisibility(isVisible) {
+  elements.coverImageClearBtn.classList.toggle("hidden", !isVisible);
+}
+
+function setCoverFileName(name) {
+  const nextName = String(name || "").trim();
+  elements.coverImageFileName.textContent = nextName || "No file chosen";
+}
+
+function updateContentCoverImageUi(previewUrl, currentUrl) {
+  const hasPreview = Boolean(previewUrl);
+  elements.contentCoverImagePreview.src = hasPreview ? previewUrl : "";
+  elements.contentCoverImagePreview.classList.toggle("hidden", !hasPreview);
+  elements.contentCoverImagePlaceholder.classList.toggle("hidden", hasPreview);
+
+  const normalizedCurrentUrl = String(currentUrl || "").trim();
+  if (!normalizedCurrentUrl) {
+    elements.contentCoverImageCurrentUrl.textContent = "";
+    elements.contentCoverImageCurrentUrl.classList.add("hidden");
+    return;
+  }
+
+  elements.contentCoverImageCurrentUrl.textContent = `Current image: ${normalizedCurrentUrl}`;
+  elements.contentCoverImageCurrentUrl.classList.remove("hidden");
+}
+
+function setContentCoverClearVisibility(isVisible) {
+  elements.contentCoverImageClearBtn.classList.toggle("hidden", !isVisible);
+}
+
+function setContentCoverFileName(name) {
+  const nextName = String(name || "").trim();
+  elements.contentCoverImageFileName.textContent = nextName || "No file chosen";
+}
+
+function setContentFileClearVisibility(isVisible) {
+  elements.contentFileClearBtn.classList.toggle("hidden", !isVisible);
+}
+
+function setContentFileName(name) {
+  const nextName = String(name || "").trim();
+  elements.contentFileName.textContent = nextName || "No file chosen";
+}
+
+function updateContentFileUrlUi(currentUrl) {
+  const normalizedCurrentUrl = String(currentUrl || "").trim();
+  if (!normalizedCurrentUrl) {
+    elements.contentFileCurrentUrl.textContent = "";
+    elements.contentFileCurrentUrl.classList.add("hidden");
+    return;
+  }
+
+  elements.contentFileCurrentUrl.textContent = `Current file: ${normalizedCurrentUrl}`;
+  elements.contentFileCurrentUrl.classList.remove("hidden");
+}
+
+function clearContentCoverImageSelection() {
+  if (state.contentCoverPreviewObjectUrl) {
+    URL.revokeObjectURL(state.contentCoverPreviewObjectUrl);
+    state.contentCoverPreviewObjectUrl = null;
+  }
+  state.selectedContentCoverImageFile = null;
+  elements.contentCoverImageInput.value = "";
+  setContentCoverFileName("");
+  setContentCoverClearVisibility(false);
+  const existingUrl = String(elements.contentCoverUrlInput.value || "").trim();
+  updateContentCoverImageUi(existingUrl, existingUrl);
+}
+
+function clearContentFileSelection() {
+  state.selectedContentFile = null;
+  elements.contentFileInput.value = "";
+  setContentFileName("");
+  setContentFileClearVisibility(false);
+  const existingUrl = String(elements.fileUrlInput.value || "").trim();
+  updateContentFileUrlUi(existingUrl);
+}
+
+function clearCoverImageSelection() {
+  if (state.coverPreviewObjectUrl) {
+    URL.revokeObjectURL(state.coverPreviewObjectUrl);
+    state.coverPreviewObjectUrl = null;
+  }
+  state.selectedCoverImageFile = null;
+  elements.coverImageInput.value = "";
+  setCoverFileName("");
+  setCoverClearVisibility(false);
+  const existingUrl = String(state.editingManga?.cover_url || "").trim();
+  updateCoverImageUi(existingUrl, existingUrl);
+}
+
+function isSupportedCoverImage(file) {
+  if (!(file instanceof File)) return false;
+  const name = String(file.name || "").toLowerCase();
+  const isSupportedByType = file.type === "image/jpeg" || file.type === "image/png";
+  const isSupportedByExt = name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png");
+  return isSupportedByType || isSupportedByExt;
+}
+
+function isSupportedContentFile(file) {
+  if (!(file instanceof File)) return false;
+  const name = String(file.name || "").toLowerCase();
+  const contentType = String(file.type || "").toLowerCase();
+  const isPdf = name.endsWith(".pdf") || contentType === "application/pdf";
+  const isEpub = name.endsWith(".epub") || contentType === "application/epub+zip";
+  return isPdf || isEpub;
+}
+
+function deriveFileFormatFromName(fileName) {
+  const normalized = String(fileName || "").trim().toLowerCase();
+  if (normalized.endsWith(".pdf")) return "pdf";
+  if (normalized.endsWith(".epub")) return "epub";
+  return "";
+}
+
+function formatBytesAsMb(bytes) {
+  const mb = Number(bytes) / (1024 * 1024);
+  const rounded = Math.round(mb * 10) / 10;
+  return Number.isInteger(rounded) ? `${rounded}` : `${rounded.toFixed(1)}`;
+}
+
+function generateMangaId() {
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (token) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = token === "x" ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
 }
 
 function deriveEndpoint(base, map) {
@@ -242,6 +468,9 @@ const endpoint = {
   get mangaUpdate() {
     return String(appAuthzConfig.updateMangaEndpoint || "").trim();
   },
+  get mangaUploadUrl() {
+    return String(appAuthzConfig.getMangaUploadUrlEndpoint || "").trim();
+  },
   get mangaDelete() {
     return deriveEndpoint(this.mangaUpdate, [["/update-manga", "/delete-manga"], ["/manga", "/manga"]]);
   },
@@ -257,14 +486,117 @@ const endpoint = {
   get contentDelete() {
     return deriveEndpoint(this.contentUpdate, [["/update-manga-content", "/delete-manga-content"], ["/manga-content", "/manga-content"]]);
   },
+  get contentUploadUrl() {
+    return String(appAuthzConfig.getMangaContentUploadUrlEndpoint || "").trim();
+  },
 };
+
+function ensureInlineContentRow(afterRow) {
+  if (!(afterRow instanceof HTMLTableRowElement)) return null;
+  if (!state.inlineContentRow) {
+    const row = document.createElement("tr");
+    row.className = "inline-content-row";
+    row.innerHTML = '<td colspan="6"><div class="inline-content-host"></div></td>';
+    state.inlineContentRow = row;
+    state.inlineContentHost = row.querySelector(".inline-content-host");
+  }
+  if (state.inlineContentRow.parentElement !== elements.mangaTableBody) {
+    elements.mangaTableBody.appendChild(state.inlineContentRow);
+  }
+  if (afterRow.nextSibling !== state.inlineContentRow) {
+    afterRow.insertAdjacentElement("afterend", state.inlineContentRow);
+  }
+  return state.inlineContentRow;
+}
+
+function clearInlineActiveRowStyles() {
+  const rows = elements.mangaTableBody.querySelectorAll("tr.is-content-active");
+  rows.forEach((row) => row.classList.remove("is-content-active"));
+  const buttons = elements.mangaTableBody.querySelectorAll("[data-open-content]");
+  buttons.forEach((button) => {
+    button.setAttribute("aria-expanded", "false");
+    button.setAttribute("title", "Expand Content");
+    button.setAttribute("aria-label", "Expand Content");
+    button.textContent = "\u25B8";
+  });
+}
+
+function syncInlineContentPanelPlacement() {
+  clearInlineActiveRowStyles();
+  const activeMangaId = String(state.activeManga?.manga_id || "").trim();
+  setParentGridLock(Boolean(activeMangaId));
+  if (!activeMangaId) {
+    if (state.inlineContentRow?.isConnected) {
+      state.inlineContentRow.remove();
+    }
+    if (elements.contentPanel?.parentElement !== elements.contentPanelStaging) {
+      elements.contentPanelStaging?.appendChild(elements.contentPanel);
+    }
+    syncParentRowInteractivity();
+    return;
+  }
+
+  const row = elements.mangaTableBody.querySelector(`tr[data-manga-id="${CSS.escape(activeMangaId)}"]`);
+  if (!(row instanceof HTMLTableRowElement)) {
+    if (state.inlineContentRow?.isConnected) {
+      state.inlineContentRow.remove();
+    }
+    if (elements.contentPanel?.parentElement !== elements.contentPanelStaging) {
+      elements.contentPanelStaging?.appendChild(elements.contentPanel);
+    }
+    syncParentRowInteractivity();
+    return;
+  }
+  row.classList.add("is-content-active");
+  const activeToggle = row.querySelector("[data-open-content]");
+  if (activeToggle) {
+    activeToggle.setAttribute("aria-expanded", "true");
+    activeToggle.setAttribute("title", "Collapse Content");
+    activeToggle.setAttribute("aria-label", "Collapse Content");
+    activeToggle.textContent = "\u25BE";
+  }
+  ensureInlineContentRow(row);
+  if (state.inlineContentHost && elements.contentPanel) {
+    state.inlineContentHost.appendChild(elements.contentPanel);
+  }
+  syncParentRowInteractivity();
+}
 
 function setBusy(nextBusy) {
   state.busy = nextBusy;
-  elements.refreshBtn.disabled = nextBusy;
-  elements.addMangaBtn.disabled = nextBusy;
+  const isParentLocked = Boolean(state.activeManga?.manga_id);
+  elements.searchInput.disabled = isParentLocked;
+  elements.refreshBtn.disabled = nextBusy || isParentLocked;
+  elements.addMangaBtn.disabled = nextBusy || isParentLocked;
   elements.saveMangaBtn.disabled = nextBusy;
   elements.saveContentBtn.disabled = nextBusy;
+}
+
+function setParentGridLock(isLocked) {
+  elements.adminGridShell?.classList.toggle("is-locked", isLocked);
+  elements.searchInput.disabled = isLocked;
+  elements.refreshBtn.disabled = state.busy || isLocked;
+  elements.addMangaBtn.disabled = state.busy || isLocked;
+}
+
+function syncParentRowInteractivity() {
+  const isLocked = Boolean(state.activeManga?.manga_id);
+  const rows = elements.mangaTableBody.querySelectorAll(":scope > tr");
+  rows.forEach((row) => {
+    const isActive = row.classList.contains("is-content-active");
+    const toggle = row.querySelector("[data-open-content]");
+    if (toggle instanceof HTMLButtonElement) {
+      toggle.disabled = isLocked && !isActive;
+    }
+    const editBtn = row.querySelector("[data-edit-manga]");
+    if (editBtn instanceof HTMLButtonElement) {
+      editBtn.disabled = isLocked;
+    }
+    const deleteBtn = row.querySelector("[data-delete-manga]");
+    if (deleteBtn instanceof HTMLButtonElement) {
+      deleteBtn.disabled = isLocked;
+    }
+  });
 }
 
 function normalizeManga(item) {
@@ -302,36 +634,13 @@ function normalizeContent(item) {
 }
 
 async function fetchMangaList() {
-  const data = await requestJson(endpoint.mangaGet, {
+  const body = await requestJson(endpoint.mangaGet, {
     method: "GET",
     headers: { Authorization: `Bearer ${state.session.accessToken}` },
   });
+  const data = responseData(body);
   const items = Array.isArray(data?.items) ? data.items : [];
   state.mangaItems = items.map(normalizeManga).sort((a, b) => a.title.localeCompare(b.title));
-}
-
-async function fetchContentCountForManga(mangaId) {
-  const url = new URL(endpoint.contentGet);
-  url.searchParams.set("manga_id", mangaId);
-  const data = await requestJson(url.toString(), {
-    method: "GET",
-    headers: { Authorization: `Bearer ${state.session.accessToken}` },
-  });
-  return Number(data?.count || 0);
-}
-
-async function fetchAllContentCounts() {
-  state.contentCountByMangaId.clear();
-  await Promise.all(
-    state.mangaItems.map(async (item) => {
-      try {
-        const count = await fetchContentCountForManga(item.manga_id);
-        state.contentCountByMangaId.set(item.manga_id, count);
-      } catch {
-        state.contentCountByMangaId.set(item.manga_id, 0);
-      }
-    })
-  );
 }
 
 function applyMangaFilters() {
@@ -341,6 +650,12 @@ function applyMangaFilters() {
     const haystack = [item.manga_id, item.title, item.publisher, item.series].join(" ").toLowerCase();
     return haystack.includes(search);
   });
+  if (state.activeManga?.manga_id) {
+    const stillVisible = state.filteredMangaItems.some((item) => item.manga_id === state.activeManga?.manga_id);
+    if (!stillVisible) {
+      closeContentPanel();
+    }
+  }
   renderMangaGrid();
 }
 
@@ -350,24 +665,51 @@ function renderMangaGrid() {
     const row = document.createElement("tr");
     row.innerHTML = '<td class="admin-grid-empty" colspan="6">No manga records found.</td>';
     elements.mangaTableBody.appendChild(row);
-    elements.resultsCount.textContent = "0 records";
     return;
   }
 
   const fragment = document.createDocumentFragment();
+  const isGridLocked = Boolean(state.activeManga?.manga_id);
   state.filteredMangaItems.forEach((item) => {
-    const count = state.contentCountByMangaId.get(item.manga_id) ?? 0;
+    const mangaId = String(item.manga_id || "").trim();
+    const isActive = mangaId && mangaId === String(state.activeManga?.manga_id || "").trim();
+    const expandTitle = isActive ? "Collapse Content" : "Expand Content";
+    const canToggle = !isGridLocked || isActive;
+    const expandIcon = isActive ? "\u25BE" : "\u25B8";
     const row = document.createElement("tr");
+    row.setAttribute("data-manga-id", mangaId);
+    if (isActive) {
+      row.classList.add("is-content-active");
+    }
     row.innerHTML = `
-      <td>${escapeHtml(item.manga_id)}</td>
+      <td class="col-expand-cell">
+        <button
+          type="button"
+          class="expand-toggle-btn"
+          data-open-content="${escapeHtml(item.manga_id)}"
+          title="${expandTitle}"
+          aria-label="${expandTitle}"
+          aria-expanded="${isActive ? "true" : "false"}"
+          ${canToggle ? "" : "disabled"}
+        >${expandIcon}</button>
+      </td>
+      <td class="col-cover-cell">${renderCoverThumb(item.cover_url, item.title)}</td>
       <td>${escapeHtml(item.title || "-")}</td>
       <td>${escapeHtml(item.publisher || "-")}</td>
       <td>${escapeHtml(item.series || "-")}</td>
-      <td><button type="button" class="grid-link-btn" data-open-content="${escapeHtml(item.manga_id)}">${count}</button></td>
       <td>
         <div class="row-actions">
-          <button type="button" class="row-action-btn" data-edit-manga="${escapeHtml(item.manga_id)}">Edit</button>
-          <button type="button" class="danger-btn" data-delete-manga="${escapeHtml(item.manga_id)}">Delete</button>
+          <button type="button" class="row-action-btn icon-action-btn" data-edit-manga="${escapeHtml(item.manga_id)}" title="Edit" aria-label="Edit" ${isGridLocked ? "disabled" : ""}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 20h4l10-10-4-4L4 16v4z"></path>
+              <path d="M13 7l4 4"></path>
+            </svg>
+          </button>
+          <button type="button" class="row-action-btn icon-action-btn icon-delete-btn" data-delete-manga="${escapeHtml(item.manga_id)}" title="Delete" aria-label="Delete" ${isGridLocked ? "disabled" : ""}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1h4a1 1 0 1 1 0 2h-1l-.78 11.2A2 2 0 0 1 15.22 19H8.78a2 2 0 0 1-1.99-1.8L6 6H5a1 1 0 1 1 0-2h4zm2 0h2V3h-2v1zm-1 4a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0V9a1 1 0 0 0-1-1zm4 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0V9a1 1 0 0 0-1-1z"></path>
+            </svg>
+          </button>
         </div>
       </td>
     `;
@@ -375,7 +717,8 @@ function renderMangaGrid() {
   });
 
   elements.mangaTableBody.appendChild(fragment);
-  elements.resultsCount.textContent = `${state.filteredMangaItems.length} record${state.filteredMangaItems.length === 1 ? "" : "s"}`;
+  syncInlineContentPanelPlacement();
+  bindCoverThumbFallbacks(elements.mangaTableBody);
 }
 
 function openMangaModal(mode, item = null) {
@@ -384,19 +727,21 @@ function openMangaModal(mode, item = null) {
   clearMangaModalError();
   elements.mangaModalTitle.textContent = mode === "update" ? "Edit Manga" : "Add Manga";
 
-  elements.mangaIdInput.value = item?.manga_id || "";
+  elements.mangaIdInput.value = mode === "update" ? item?.manga_id || "" : generateMangaId();
   elements.mangaIdInput.readOnly = mode === "update";
   elements.titleInput.value = item?.title || "";
   elements.publisherInput.value = item?.publisher || "";
   elements.seriesInput.value = item?.series || "";
   elements.ageRatingInput.value = item?.age_rating || "";
   elements.japaneseTitleInput.value = item?.japanese_title || "";
-  elements.coverUrlInput.value = item?.cover_url || "";
   elements.keywordsInput.value = Array.isArray(item?.keywords) ? item.keywords.join(", ") : "";
   elements.synopsisInput.value = item?.synopsis || "";
   elements.bisacInput.value = item?.bisac || "";
   elements.salesRestrictionInput.value = item?.sales_restriction || "";
   elements.copyrightInput.value = item?.copyright || "";
+  clearCoverImageSelection();
+  const currentCoverUrl = String(item?.cover_url || "").trim();
+  updateCoverImageUi(currentCoverUrl, currentCoverUrl);
 
   elements.mangaModal.classList.remove("hidden");
   elements.mangaModal.setAttribute("aria-hidden", "false");
@@ -404,6 +749,7 @@ function openMangaModal(mode, item = null) {
 
 function closeMangaModal() {
   state.editingManga = null;
+  clearCoverImageSelection();
   elements.mangaModal.classList.add("hidden");
   elements.mangaModal.setAttribute("aria-hidden", "true");
 }
@@ -422,7 +768,7 @@ function buildMangaPayload() {
     series: String(elements.seriesInput.value || "").trim(),
     age_rating: String(elements.ageRatingInput.value || "").trim(),
     japanese_title: String(elements.japaneseTitleInput.value || "").trim(),
-    cover_url: String(elements.coverUrlInput.value || "").trim(),
+    cover_url: String(state.editingManga?.cover_url || "").trim(),
     keywords: keywordList,
     synopsis: String(elements.synopsisInput.value || "").trim(),
     bisac: String(elements.bisacInput.value || "").trim(),
@@ -431,11 +777,60 @@ function buildMangaPayload() {
   };
 }
 
+async function uploadCoverImageAndPersist(mangaId, payloadBase, file) {
+  const uploadResponse = await requestJson(endpoint.mangaUploadUrl, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({
+      manga_id: mangaId,
+      file_kind: "cover",
+      file_name: file.name,
+      content_type: file.type || "application/octet-stream",
+      file_size: file.size,
+      manga_slug: payloadBase.series || payloadBase.title || "",
+    }),
+  });
+  const uploadData = responseData(uploadResponse);
+  const uploadUrl = String(uploadData.upload_url || "").trim();
+  const coverUrl = String(uploadData.file_url || uploadData.s3_url || "").trim();
+  if (!uploadUrl || !coverUrl) {
+    throw new Error("Upload URL response is missing required fields.");
+  }
+
+  const uploadResult = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+    },
+    body: file,
+  });
+  if (!uploadResult.ok) {
+    throw new Error(`Cover upload failed (${uploadResult.status}).`);
+  }
+
+  await requestJson(endpoint.mangaUpdate, {
+    method: "PUT",
+    headers: jsonHeaders(),
+    body: JSON.stringify({
+      manga_id: mangaId,
+      cover_url: coverUrl,
+    }),
+  });
+
+  return coverUrl;
+}
+
 async function saveManga(event) {
   event.preventDefault();
   clearMangaModalError();
 
   const payload = buildMangaPayload();
+  const selectedCoverFile = state.selectedCoverImageFile;
+  let metadataSaved = false;
+  if (!payload.manga_id && state.mangaMode === "create") {
+    payload.manga_id = generateMangaId();
+    elements.mangaIdInput.value = payload.manga_id;
+  }
   if (!payload.manga_id) {
     showMangaModalError("manga_id is required.");
     return;
@@ -452,10 +847,24 @@ async function saveManga(event) {
       headers: jsonHeaders(),
       body: JSON.stringify(payload),
     });
+    metadataSaved = true;
+    if (selectedCoverFile) {
+      const nextCoverUrl = await uploadCoverImageAndPersist(payload.manga_id, payload, selectedCoverFile);
+      payload.cover_url = nextCoverUrl;
+    }
     showSuccess(isCreate ? "Manga created." : "Manga updated.");
     closeMangaModal();
     await refreshMangaGrid();
   } catch (error) {
+    if (metadataSaved && isCreate) {
+      state.mangaMode = "update";
+      elements.mangaModalTitle.textContent = "Edit Manga";
+      elements.mangaIdInput.readOnly = true;
+      state.editingManga = {
+        ...payload,
+      };
+      await refreshMangaGrid();
+    }
     showMangaModalError(error instanceof Error ? error.message : String(error));
   } finally {
     setBusy(false);
@@ -463,7 +872,7 @@ async function saveManga(event) {
 }
 
 async function deleteManga(mangaId) {
-  if (!window.confirm(`Delete manga ${mangaId}? This does not auto-delete child content.`)) {
+  if (!window.confirm("Are you sure you want to delete this manga?")) {
     return;
   }
   try {
@@ -482,7 +891,7 @@ async function deleteManga(mangaId) {
   }
 }
 
-async function openContentDrawer(mangaId) {
+async function openContentPanel(mangaId) {
   const manga = state.mangaItems.find((item) => item.manga_id === mangaId);
   if (!manga) {
     showError("Manga not found.");
@@ -490,32 +899,49 @@ async function openContentDrawer(mangaId) {
   }
 
   state.activeManga = manga;
-  elements.drawerTitle.textContent = `Manga Content: ${manga.title || manga.manga_id}`;
-  elements.drawerSubtitle.textContent = `manga_id: ${manga.manga_id}`;
-  clearContentDrawerError();
+  setParentGridLock(true);
+  clearInlineActiveRowStyles();
+  const selectedRow = elements.mangaTableBody.querySelector(`tr[data-manga-id="${CSS.escape(manga.manga_id)}"]`);
+  if (selectedRow instanceof HTMLTableRowElement) {
+    selectedRow.classList.add("is-content-active");
+    const selectedToggle = selectedRow.querySelector("[data-open-content]");
+    if (selectedToggle) {
+      selectedToggle.setAttribute("aria-expanded", "true");
+      selectedToggle.setAttribute("title", "Collapse Content");
+      selectedToggle.setAttribute("aria-label", "Collapse Content");
+      selectedToggle.textContent = "\u25BE";
+    }
+  }
+  clearContentPanelError();
 
   try {
     const url = new URL(endpoint.contentGet);
     url.searchParams.set("manga_id", manga.manga_id);
-    const data = await requestJson(url.toString(), {
+    const body = await requestJson(url.toString(), {
       method: "GET",
       headers: { Authorization: `Bearer ${state.session.accessToken}` },
     });
+    const data = responseData(body);
     const items = Array.isArray(data?.items) ? data.items : [];
     state.contentItems = items.map(normalizeContent).sort((a, b) => a.content_key.localeCompare(b.content_key));
     renderContentGrid();
-    elements.contentDrawer.classList.remove("hidden");
-    elements.contentDrawer.setAttribute("aria-hidden", "false");
+    syncInlineContentPanelPlacement();
   } catch (error) {
-    showContentDrawerError(error instanceof Error ? error.message : String(error));
+    showContentPanelError(error instanceof Error ? error.message : String(error));
   }
 }
 
-function closeContentDrawer() {
+function closeContentPanel() {
   state.activeManga = null;
   state.contentItems = [];
-  elements.contentDrawer.classList.add("hidden");
-  elements.contentDrawer.setAttribute("aria-hidden", "true");
+  setParentGridLock(false);
+  clearInlineActiveRowStyles();
+  if (state.inlineContentRow?.isConnected) {
+    state.inlineContentRow.remove();
+  }
+  if (elements.contentPanel?.parentElement !== elements.contentPanelStaging) {
+    elements.contentPanelStaging?.appendChild(elements.contentPanel);
+  }
 }
 
 function renderContentGrid() {
@@ -531,21 +957,31 @@ function renderContentGrid() {
   state.contentItems.forEach((item) => {
     const row = document.createElement("tr");
     row.innerHTML = `
-      <td>${escapeHtml(item.content_key)}</td>
+      <td class="col-cover-cell">${renderCoverThumb(item.cover_url, item.title || item.content_key)}</td>
       <td>${escapeHtml(item.content_type || "-")}</td>
       <td>${escapeHtml(item.sequence_number || "-")}</td>
       <td>${escapeHtml(item.title || "-")}</td>
       <td>${escapeHtml(item.file_format || "-")}</td>
-      <td>
+      <td class="col-action-cell">
         <div class="row-actions">
-          <button type="button" class="row-action-btn" data-edit-content="${escapeHtml(item.content_key)}">Edit</button>
-          <button type="button" class="danger-btn" data-delete-content="${escapeHtml(item.content_key)}">Delete</button>
+          <button type="button" class="row-action-btn icon-action-btn" data-edit-content="${escapeHtml(item.content_key)}" title="Edit" aria-label="Edit">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 20h4l10-10-4-4L4 16v4z"></path>
+              <path d="M13 7l4 4"></path>
+            </svg>
+          </button>
+          <button type="button" class="row-action-btn icon-action-btn icon-delete-btn" data-delete-content="${escapeHtml(item.content_key)}" title="Delete" aria-label="Delete">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1h4a1 1 0 1 1 0 2h-1l-.78 11.2A2 2 0 0 1 15.22 19H8.78a2 2 0 0 1-1.99-1.8L6 6H5a1 1 0 1 1 0-2h4zm2 0h2V3h-2v1zm-1 4a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0V9a1 1 0 0 0-1-1zm4 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0V9a1 1 0 0 0-1-1z"></path>
+            </svg>
+          </button>
         </div>
       </td>
     `;
     fragment.appendChild(row);
   });
   elements.contentTableBody.appendChild(fragment);
+  bindCoverThumbFallbacks(elements.contentTableBody);
 }
 
 function openContentModal(mode, item = null) {
@@ -554,12 +990,20 @@ function openContentModal(mode, item = null) {
   clearContentModalError();
 
   const mangaId = state.activeManga?.manga_id || item?.manga_id || "";
-  elements.contentModalTitle.textContent = mode === "update" ? "Edit MangaContent" : "Add MangaContent";
+  elements.contentModalTitle.textContent = mode === "update" ? "Edit Content" : "Add Content";
   elements.contentMangaIdInput.value = mangaId;
   elements.contentKeyInput.value = item?.content_key || "";
-  elements.contentKeyInput.readOnly = mode === "update";
-  elements.contentTypeInput.value = item?.content_type || "";
+  const existingType = String(item?.content_type || "").trim().toLowerCase();
+  if (existingType === "volume") {
+    elements.contentTypeInput.value = "Volume";
+  } else if (existingType === "chapter") {
+    elements.contentTypeInput.value = "Chapter";
+  } else {
+    elements.contentTypeInput.value = "Volume";
+  }
+  elements.contentTypeInput.disabled = mode === "update";
   elements.sequenceNumberInput.value = item?.sequence_number || "";
+  elements.sequenceNumberInput.readOnly = mode === "update";
   elements.contentTitleInput.value = item?.title || "";
   elements.externalContentIdInput.value = item?.external_content_id || "";
   elements.contentAuthorInput.value = item?.author || "";
@@ -568,6 +1012,11 @@ function openContentModal(mode, item = null) {
   elements.contentCoverUrlInput.value = item?.cover_url || "";
   elements.fileUrlInput.value = item?.file_url || "";
   elements.contentSynopsisInput.value = item?.synopsis || "";
+  clearContentCoverImageSelection();
+  clearContentFileSelection();
+  const currentCoverUrl = String(item?.cover_url || "").trim();
+  updateContentCoverImageUi(currentCoverUrl, currentCoverUrl);
+  updateContentFileUrlUi(String(item?.file_url || "").trim());
 
   elements.contentModal.classList.remove("hidden");
   elements.contentModal.setAttribute("aria-hidden", "false");
@@ -575,16 +1024,36 @@ function openContentModal(mode, item = null) {
 
 function closeContentModal() {
   state.editingContent = null;
+  clearContentCoverImageSelection();
+  clearContentFileSelection();
   elements.contentModal.classList.add("hidden");
   elements.contentModal.setAttribute("aria-hidden", "true");
 }
 
+function buildContentKey(contentType, sequenceNumber) {
+  const normalizedType = String(contentType || "").trim();
+  const normalizedSequence = Number(sequenceNumber);
+  if (!normalizedType || !Number.isFinite(normalizedSequence) || normalizedSequence <= 0) {
+    return "";
+  }
+  return `${normalizedType.toUpperCase()}#${String(Math.trunc(normalizedSequence)).padStart(4, "0")}`;
+}
+
 function buildContentPayload() {
+  const normalizedType = String(elements.contentTypeInput.value || "").trim();
+  const sequenceText = String(elements.sequenceNumberInput.value || "").trim();
+  const parsedSequence = Number(sequenceText);
+  let contentKey = String(elements.contentKeyInput.value || "").trim();
+  if (state.contentMode === "create") {
+    contentKey = buildContentKey(normalizedType, parsedSequence);
+    elements.contentKeyInput.value = contentKey;
+  }
+
   const payload = {
     manga_id: String(elements.contentMangaIdInput.value || "").trim(),
-    content_key: String(elements.contentKeyInput.value || "").trim(),
-    content_type: String(elements.contentTypeInput.value || "").trim().toLowerCase(),
-    sequence_number: String(elements.sequenceNumberInput.value || "").trim(),
+    content_key: contentKey,
+    content_type: normalizedType,
+    sequence_number: sequenceText,
     title: String(elements.contentTitleInput.value || "").trim(),
     external_content_id: String(elements.externalContentIdInput.value || "").trim(),
     synopsis: String(elements.contentSynopsisInput.value || "").trim(),
@@ -604,13 +1073,80 @@ function buildContentPayload() {
   return payload;
 }
 
+async function uploadContentFileAndPersist(payloadBase, fileKind, file) {
+  const uploadResponse = await requestJson(endpoint.contentUploadUrl, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({
+      manga_id: payloadBase.manga_id,
+      content_key: payloadBase.content_key,
+      content_type: payloadBase.content_type,
+      sequence_number: payloadBase.sequence_number,
+      file_kind: fileKind,
+      file_name: file.name,
+      content_type: file.type || "application/octet-stream",
+      file_size: file.size,
+      manga_slug: state.activeManga?.series || state.activeManga?.title || "",
+    }),
+  });
+  const uploadData = responseData(uploadResponse);
+  const uploadUrl = String(uploadData.upload_url || "").trim();
+  const fileUrl = String(uploadData.file_url || uploadData.s3_url || "").trim();
+  if (!uploadUrl || !fileUrl) {
+    throw new Error("Upload URL response is missing required fields.");
+  }
+
+  const uploadResult = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+    },
+    body: file,
+  });
+  if (!uploadResult.ok) {
+    throw new Error(`${fileKind === "cover" ? "Cover image" : "Content file"} upload failed (${uploadResult.status}).`);
+  }
+
+  const updatePayload = {
+    manga_id: payloadBase.manga_id,
+    content_key: payloadBase.content_key,
+  };
+  if (fileKind === "cover") {
+    updatePayload.cover_url = fileUrl;
+  } else {
+    updatePayload.file_url = fileUrl;
+    const currentFormat = String(payloadBase.file_format || "").trim();
+    if (!currentFormat) {
+      const inferred = deriveFileFormatFromName(file.name);
+      if (inferred) {
+        updatePayload.file_format = inferred;
+      }
+    }
+  }
+
+  await requestJson(endpoint.contentUpdate, {
+    method: "PUT",
+    headers: jsonHeaders(),
+    body: JSON.stringify(updatePayload),
+  });
+
+  return fileUrl;
+}
+
 async function saveContent(event) {
   event.preventDefault();
   clearContentModalError();
 
   const payload = buildContentPayload();
+  const selectedCoverFile = state.selectedContentCoverImageFile;
+  const selectedContentFile = state.selectedContentFile;
+  let metadataSaved = false;
   if (!payload.manga_id || !payload.content_key) {
     showContentModalError("manga_id and content_key are required.");
+    return;
+  }
+  if (payload.content_type !== "Volume" && payload.content_type !== "Chapter") {
+    showContentModalError("Type is required. Select Volume or Chapter.");
     return;
   }
 
@@ -625,11 +1161,32 @@ async function saveContent(event) {
       headers: jsonHeaders(),
       body: JSON.stringify(payload),
     });
-    showSuccess(isCreate ? "MangaContent created." : "MangaContent updated.");
+    metadataSaved = true;
+    if (selectedCoverFile) {
+      const nextCoverUrl = await uploadContentFileAndPersist(payload, "cover", selectedCoverFile);
+      payload.cover_url = nextCoverUrl;
+      elements.contentCoverUrlInput.value = nextCoverUrl;
+    }
+    if (selectedContentFile) {
+      const nextFileUrl = await uploadContentFileAndPersist(payload, "file", selectedContentFile);
+      payload.file_url = nextFileUrl;
+      elements.fileUrlInput.value = nextFileUrl;
+      if (!payload.file_format) {
+        payload.file_format = deriveFileFormatFromName(selectedContentFile.name);
+      }
+    }
+    showSuccess(isCreate ? "Content created." : "Content updated.");
     closeContentModal();
-    await openContentDrawer(payload.manga_id);
+    await openContentPanel(payload.manga_id);
     await refreshMangaGrid();
   } catch (error) {
+    if (metadataSaved && isCreate) {
+      state.contentMode = "update";
+      elements.contentModalTitle.textContent = "Edit Content";
+      state.editingContent = {
+        ...payload,
+      };
+    }
     showContentModalError(error instanceof Error ? error.message : String(error));
   } finally {
     setBusy(false);
@@ -639,7 +1196,7 @@ async function saveContent(event) {
 async function deleteContent(contentKey) {
   const mangaId = state.activeManga?.manga_id;
   if (!mangaId) return;
-  if (!window.confirm(`Delete child ${contentKey}?`)) {
+  if (!window.confirm("Are you sure you want to delete this record?")) {
     return;
   }
 
@@ -650,11 +1207,11 @@ async function deleteContent(contentKey) {
       headers: jsonHeaders(),
       body: JSON.stringify({ manga_id: mangaId, content_key: contentKey }),
     });
-    showSuccess("MangaContent deleted.");
-    await openContentDrawer(mangaId);
+    showSuccess("Content deleted.");
+    await openContentPanel(mangaId);
     await refreshMangaGrid();
   } catch (error) {
-    showContentDrawerError(error instanceof Error ? error.message : String(error));
+    showContentPanelError(error instanceof Error ? error.message : String(error));
   } finally {
     setBusy(false);
   }
@@ -665,7 +1222,14 @@ async function refreshMangaGrid() {
   setBusy(true);
   try {
     await fetchMangaList();
-    await fetchAllContentCounts();
+    if (state.activeManga?.manga_id) {
+      const nextActive = state.mangaItems.find((item) => item.manga_id === state.activeManga?.manga_id) || null;
+      if (!nextActive) {
+        closeContentPanel();
+      } else {
+        state.activeManga = nextActive;
+      }
+    }
     applyMangaFilters();
   } catch (error) {
     showError(error instanceof Error ? error.message : String(error));
@@ -681,17 +1245,23 @@ function wireEvents() {
 
   elements.mangaTableBody.addEventListener("click", (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
+    if (!(target instanceof Element)) return;
 
     const openBtn = target.closest("[data-open-content]");
-    if (openBtn instanceof HTMLElement) {
+    if (openBtn instanceof Element) {
       const mangaId = String(openBtn.getAttribute("data-open-content") || "").trim();
-      void openContentDrawer(mangaId);
+      const isSameManga = mangaId && mangaId === String(state.activeManga?.manga_id || "").trim();
+      if (isSameManga && state.inlineContentRow?.isConnected) {
+        closeContentPanel();
+        renderMangaGrid();
+        return;
+      }
+      void openContentPanel(mangaId);
       return;
     }
 
     const editBtn = target.closest("[data-edit-manga]");
-    if (editBtn instanceof HTMLElement) {
+    if (editBtn instanceof Element) {
       const mangaId = String(editBtn.getAttribute("data-edit-manga") || "").trim();
       const item = state.mangaItems.find((entry) => entry.manga_id === mangaId);
       if (item) openMangaModal("update", item);
@@ -699,7 +1269,7 @@ function wireEvents() {
     }
 
     const deleteBtn = target.closest("[data-delete-manga]");
-    if (deleteBtn instanceof HTMLElement) {
+    if (deleteBtn instanceof Element) {
       const mangaId = String(deleteBtn.getAttribute("data-delete-manga") || "").trim();
       void deleteManga(mangaId);
     }
@@ -707,10 +1277,10 @@ function wireEvents() {
 
   elements.contentTableBody.addEventListener("click", (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
+    if (!(target instanceof Element)) return;
 
     const editBtn = target.closest("[data-edit-content]");
-    if (editBtn instanceof HTMLElement) {
+    if (editBtn instanceof Element) {
       const contentKey = String(editBtn.getAttribute("data-edit-content") || "").trim();
       const item = state.contentItems.find((entry) => entry.content_key === contentKey);
       if (item) openContentModal("update", item);
@@ -718,7 +1288,7 @@ function wireEvents() {
     }
 
     const deleteBtn = target.closest("[data-delete-content]");
-    if (deleteBtn instanceof HTMLElement) {
+    if (deleteBtn instanceof Element) {
       const contentKey = String(deleteBtn.getAttribute("data-delete-content") || "").trim();
       void deleteContent(contentKey);
     }
@@ -726,10 +1296,140 @@ function wireEvents() {
 
   elements.mangaForm.addEventListener("submit", (event) => void saveManga(event));
   elements.contentForm.addEventListener("submit", (event) => void saveContent(event));
+  elements.coverImageInput.addEventListener("change", () => {
+    const nextFile = elements.coverImageInput.files?.[0] || null;
+    if (!nextFile) {
+      state.selectedCoverImageFile = null;
+      setCoverFileName("");
+      setCoverClearVisibility(false);
+      const existingUrl = String(state.editingManga?.cover_url || "").trim();
+      updateCoverImageUi(existingUrl, existingUrl);
+      return;
+    }
+    if (!isSupportedCoverImage(nextFile)) {
+      state.selectedCoverImageFile = null;
+      elements.coverImageInput.value = "";
+      setCoverFileName("");
+      setCoverClearVisibility(false);
+      showMangaModalError("Cover Image must be a JPG or PNG file.");
+      const existingUrl = String(state.editingManga?.cover_url || "").trim();
+      updateCoverImageUi(existingUrl, existingUrl);
+      return;
+    }
+    if (nextFile.size > COVER_IMAGE_MAX_UPLOAD_BYTES) {
+      state.selectedCoverImageFile = null;
+      elements.coverImageInput.value = "";
+      setCoverFileName("");
+      setCoverClearVisibility(false);
+      showMangaModalError(
+        `Cover Image must be ${formatBytesAsMb(COVER_IMAGE_MAX_UPLOAD_BYTES)} MB or smaller.`
+      );
+      const existingUrl = String(state.editingManga?.cover_url || "").trim();
+      updateCoverImageUi(existingUrl, existingUrl);
+      return;
+    }
+
+    clearMangaModalError();
+    state.selectedCoverImageFile = nextFile;
+    if (state.coverPreviewObjectUrl) {
+      URL.revokeObjectURL(state.coverPreviewObjectUrl);
+      state.coverPreviewObjectUrl = null;
+    }
+    const previewUrl = URL.createObjectURL(nextFile);
+    state.coverPreviewObjectUrl = previewUrl;
+    updateCoverImageUi(previewUrl, String(state.editingManga?.cover_url || "").trim());
+    setCoverFileName(nextFile.name);
+    setCoverClearVisibility(true);
+  });
+  elements.coverImageClearBtn.addEventListener("click", () => {
+    clearMangaModalError();
+    clearCoverImageSelection();
+  });
+  elements.contentCoverImageInput.addEventListener("change", () => {
+    const nextFile = elements.contentCoverImageInput.files?.[0] || null;
+    if (!nextFile) {
+      state.selectedContentCoverImageFile = null;
+      setContentCoverFileName("");
+      setContentCoverClearVisibility(false);
+      const existingUrl = String(elements.contentCoverUrlInput.value || "").trim();
+      updateContentCoverImageUi(existingUrl, existingUrl);
+      return;
+    }
+    if (!isSupportedCoverImage(nextFile)) {
+      state.selectedContentCoverImageFile = null;
+      elements.contentCoverImageInput.value = "";
+      setContentCoverFileName("");
+      setContentCoverClearVisibility(false);
+      showContentModalError("Cover Image must be a JPG or PNG file.");
+      const existingUrl = String(elements.contentCoverUrlInput.value || "").trim();
+      updateContentCoverImageUi(existingUrl, existingUrl);
+      return;
+    }
+    if (nextFile.size > CONTENT_COVER_IMAGE_MAX_UPLOAD_BYTES) {
+      state.selectedContentCoverImageFile = null;
+      elements.contentCoverImageInput.value = "";
+      setContentCoverFileName("");
+      setContentCoverClearVisibility(false);
+      showContentModalError(
+        `Cover Image must be ${formatBytesAsMb(CONTENT_COVER_IMAGE_MAX_UPLOAD_BYTES)} MB or smaller.`
+      );
+      const existingUrl = String(elements.contentCoverUrlInput.value || "").trim();
+      updateContentCoverImageUi(existingUrl, existingUrl);
+      return;
+    }
+
+    clearContentModalError();
+    state.selectedContentCoverImageFile = nextFile;
+    if (state.contentCoverPreviewObjectUrl) {
+      URL.revokeObjectURL(state.contentCoverPreviewObjectUrl);
+      state.contentCoverPreviewObjectUrl = null;
+    }
+    const previewUrl = URL.createObjectURL(nextFile);
+    state.contentCoverPreviewObjectUrl = previewUrl;
+    updateContentCoverImageUi(previewUrl, String(elements.contentCoverUrlInput.value || "").trim());
+    setContentCoverFileName(nextFile.name);
+    setContentCoverClearVisibility(true);
+  });
+  elements.contentCoverImageClearBtn.addEventListener("click", () => {
+    clearContentModalError();
+    clearContentCoverImageSelection();
+  });
+  elements.contentFileInput.addEventListener("change", () => {
+    const nextFile = elements.contentFileInput.files?.[0] || null;
+    if (!nextFile) {
+      state.selectedContentFile = null;
+      setContentFileName("");
+      setContentFileClearVisibility(false);
+      updateContentFileUrlUi(String(elements.fileUrlInput.value || "").trim());
+      return;
+    }
+    if (!isSupportedContentFile(nextFile)) {
+      state.selectedContentFile = null;
+      elements.contentFileInput.value = "";
+      setContentFileName("");
+      setContentFileClearVisibility(false);
+      showContentModalError("Content file must be a PDF or EPUB.");
+      updateContentFileUrlUi(String(elements.fileUrlInput.value || "").trim());
+      return;
+    }
+
+    clearContentModalError();
+    state.selectedContentFile = nextFile;
+    const inferredFormat = deriveFileFormatFromName(nextFile.name);
+    if (inferredFormat && !String(elements.fileFormatInput.value || "").trim()) {
+      elements.fileFormatInput.value = inferredFormat;
+    }
+    setContentFileName(nextFile.name);
+    setContentFileClearVisibility(true);
+    updateContentFileUrlUi(String(elements.fileUrlInput.value || "").trim());
+  });
+  elements.contentFileClearBtn.addEventListener("click", () => {
+    clearContentModalError();
+    clearContentFileSelection();
+  });
 
   elements.closeMangaModalBtn.addEventListener("click", closeMangaModal);
   elements.cancelMangaBtn.addEventListener("click", closeMangaModal);
-  elements.closeDrawerBtn.addEventListener("click", closeContentDrawer);
   elements.addContentBtn.addEventListener("click", () => openContentModal("create"));
   elements.closeContentModalBtn.addEventListener("click", closeContentModal);
   elements.cancelContentBtn.addEventListener("click", closeContentModal);
@@ -738,13 +1438,10 @@ function wireEvents() {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
     if (target.matches("[data-close-manga-modal='true']")) closeMangaModal();
-    if (target.matches("[data-close-drawer='true']")) closeContentDrawer();
-    if (target.matches("[data-close-content-modal='true']")) closeContentModal();
   });
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    closeContentModal();
     closeMangaModal();
   });
 
@@ -758,8 +1455,16 @@ async function init() {
     showError("Manga API endpoints are not configured in auth-config.js.");
     return;
   }
+  if (!mangaUploadApiConfigLooksReady()) {
+    showError("Manga upload URL endpoint is not configured in auth-config.js.");
+    return;
+  }
   if (!mangaContentApiConfigLooksReady()) {
-    showError("MangaContent API endpoints are not configured in auth-config.js.");
+    showError("Content API endpoints are not configured in auth-config.js.");
+    return;
+  }
+  if (!mangaContentUploadApiConfigLooksReady()) {
+    showError("Content upload URL endpoint is not configured in auth-config.js.");
     return;
   }
 

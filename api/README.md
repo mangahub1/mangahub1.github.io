@@ -387,6 +387,9 @@ Optional flags:
   - Manga cover upload URL (`file_kind` must be `cover`).
 - `POST /get-manga-content-upload-url`
   - MangaContent upload URL (`file_kind` is `cover` or `file`).
+  - `cover`: JPG/PNG only, max size from `MAX_MANGA_CONTENT_COVER_UPLOAD_BYTES` (default 3MB).
+  - `file`: PDF/EPUB only, max size from `MAX_MANGA_CONTENT_FILE_UPLOAD_BYTES` (default 1.5GB).
+  - Body must include `file_size` in bytes.
 
 ### `content_key` helper
 
@@ -443,7 +446,8 @@ Use `utils/content_key.py`:
   "content_key": "VOLUME#0001",
   "file_kind": "file",
   "file_name": "book.pdf",
-  "content_type": "application/pdf"
+  "content_type": "application/pdf",
+  "file_size": 73400320
 }
 ```
 

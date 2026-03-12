@@ -62,8 +62,8 @@ def s3_key_to_public_http_url(bucket, key):
 
 def build_manga_cover_key(manga_id, file_name, content_type, manga_slug=""):
     ext = _normalize_ext(file_name, content_type)
-    if ext not in {"png", "jpeg", "webp", "svg"}:
-        raise ValueError("Unsupported cover content type.")
+    if ext not in {"png", "jpeg"}:
+        raise ValueError("Unsupported cover content type. Use JPG or PNG.")
     root = _manga_root(manga_id, manga_slug)
     return f"{root}/series/series-cover.{ext}", content_type
 
@@ -75,16 +75,16 @@ def build_manga_content_file_key(manga_id, content_key, file_kind, file_name, co
     item_label = "volume" if section == "volumes" else "chapter" if section == "chapters" else "content"
 
     if file_kind == "cover":
-        if ext not in {"png", "jpeg", "webp", "svg"}:
-            raise ValueError("Unsupported cover content type.")
-        return f"{root}/{section}/{sequence}/{item_label}-cover.{ext}", content_type
+        if ext not in {"png", "jpeg"}:
+            raise ValueError("Unsupported cover content type. Use JPG or PNG.")
+        normalized_content_type = "image/png" if ext == "png" else "image/jpeg"
+        return f"{root}/{section}/{sequence}/{item_label}-cover.{ext}", normalized_content_type
 
     if file_kind == "file":
-        if ext == "bin":
-            raise ValueError("Unsupported file content type.")
-        if not content_type:
-            content_type = "application/octet-stream"
-        return f"{root}/{section}/{sequence}/{item_label}.{ext}", content_type
+        if ext not in {"pdf", "epub"}:
+            raise ValueError("Unsupported content file type. Use PDF or EPUB.")
+        normalized_content_type = "application/pdf" if ext == "pdf" else "application/epub+zip"
+        return f"{root}/{section}/{sequence}/{item_label}.{ext}", normalized_content_type
 
     raise ValueError("file_kind must be 'cover' or 'file'.")
 

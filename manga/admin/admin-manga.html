@@ -16,7 +16,7 @@
       </a>
       <nav class="library-nav-links" aria-label="Primary">
         <a href="../../users/admin-users.html">User Accounts</a>
-        <a href="./admin-manga.html" aria-current="page">Manga</a>
+        <a href="./admin-manga.html" aria-current="page">Manga Library</a>
       </nav>
     </div>
     <div class="library-nav-right">
@@ -33,7 +33,7 @@
           <div class="settings-group" aria-label="Admin portal">
             <div class="settings-group-label">Admin Portal</div>
             <a href="../../users/admin-users.html" class="settings-item settings-subitem">User Accounts</a>
-            <a href="./admin-manga.html" class="settings-item settings-subitem">Manga</a>
+            <a href="./admin-manga.html" class="settings-item settings-subitem">Manga Library</a>
           </div>
           <a href="../../index.html" class="settings-item signout">
             <svg class="settings-item-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.75C2 1.784 2.784 1 3.75 1h2.5a.75.75 0 0 1 0 1.5h-2.5a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h2.5a.75.75 0 0 1 0 1.5h-2.5A1.75 1.75 0 0 1 2 13.25Zm10.44 4.5-1.97-1.97a.749.749 0 0 1 .326-1.275.749.749 0 0 1 .734.215l3.25 3.25a.75.75 0 0 1 0 1.06l-3.25 3.25a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734l1.97-1.97H6.75a.75.75 0 0 1 0-1.5Z"></path></svg>
@@ -46,8 +46,8 @@
 
   <main class="admin-shell">
     <section class="admin-header">
-      <h1>Manga Admin</h1>
-      <p>Manage Manga parents and child MangaContent volumes/chapters.</p>
+      <h1>Manga Library</h1>
+      <p>Manage Manga Series and Content</p>
     </section>
 
     <section id="adminError" class="admin-banner admin-banner-error hidden" role="alert"></section>
@@ -56,24 +56,28 @@
     <section class="admin-controls">
       <label class="admin-control admin-control-search">
         <span>Search</span>
-        <input id="searchInput" type="search" placeholder="Find by manga_id, title, publisher" />
+        <input id="searchInput" type="search" placeholder="Find by title, publisher, genre..." />
       </label>
-      <button id="refreshBtn" type="button" class="admin-btn admin-btn-secondary">Refresh</button>
-      <button id="addMangaBtn" type="button" class="admin-btn">Add Manga</button>
+      <button id="refreshBtn" type="button" class="admin-btn admin-btn-secondary refresh-icon-btn" title="Refresh" aria-label="Refresh">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 12a8 8 0 1 1-2.34-5.66"></path>
+          <path d="M20 4v6h-6"></path>
+        </svg>
+      </button>
+      <button id="addMangaBtn" type="button" class="admin-btn" title="Add New Manga" aria-label="Add New Manga">Add New</button>
     </section>
 
-    <section class="admin-grid-shell">
-      <div class="admin-grid-meta"><span id="resultsCount">0 records</span></div>
+    <section id="adminGridShell" class="admin-grid-shell">
       <div class="admin-grid-wrap">
         <table class="admin-grid">
           <thead>
             <tr>
-              <th>Manga ID</th>
+              <th class="col-expand">&nbsp;</th>
+              <th class="col-cover">&nbsp;</th>
               <th>Title</th>
               <th>Publisher</th>
               <th>Series</th>
-              <th>Child Content</th>
-              <th class="col-action">Actions</th>
+              <th class="col-action">&nbsp;</th>
             </tr>
           </thead>
           <tbody id="mangaTableBody"></tbody>
@@ -91,52 +95,81 @@
       </div>
       <section id="mangaModalError" class="admin-banner admin-banner-error hidden" role="alert"></section>
       <form id="mangaForm" class="admin-form">
-        <div class="form-grid">
-          <label><span>Manga ID</span><input id="mangaIdInput" name="manga_id" type="text" required /></label>
-          <label><span>Title</span><input id="titleInput" name="title" type="text" /></label>
-          <label><span>Publisher</span><input id="publisherInput" name="publisher" type="text" /></label>
-          <label><span>Series</span><input id="seriesInput" name="series" type="text" /></label>
-          <label><span>Age Rating</span><input id="ageRatingInput" name="age_rating" type="text" /></label>
-          <label><span>Japanese Title</span><input id="japaneseTitleInput" name="japanese_title" type="text" /></label>
-          <label class="span-2"><span>Cover URL</span><input id="coverUrlInput" name="cover_url" type="text" /></label>
-          <label class="span-2"><span>Keywords (comma separated)</span><input id="keywordsInput" name="keywords" type="text" /></label>
-          <label class="span-2"><span>Synopsis</span><textarea id="synopsisInput" name="synopsis" rows="3"></textarea></label>
-          <label><span>BISAC</span><input id="bisacInput" name="bisac" type="text" /></label>
-          <label><span>Sales Restriction</span><input id="salesRestrictionInput" name="sales_restriction" type="text" /></label>
-          <label class="span-2"><span>Copyright</span><input id="copyrightInput" name="copyright" type="text" /></label>
+        <input id="mangaIdInput" name="manga_id" type="hidden" />
+        <div class="manga-form-layout">
+          <section class="manga-form-top">
+            <div class="manga-form-primary">
+              <label><span>Title</span><input id="titleInput" name="title" type="text" /></label>
+              <label><span>Series</span><input id="seriesInput" name="series" type="text" /></label>
+              <label><span>Synopsis</span><textarea id="synopsisInput" name="synopsis" rows="3"></textarea></label>
+              <label><span>Publisher</span><input id="publisherInput" name="publisher" type="text" /></label>
+            </div>
+            <div class="manga-form-cover">
+              <label>
+                <span>Cover Image</span>
+                <div class="cover-image-field">
+                  <div id="coverImagePreviewWrap" class="cover-image-preview-wrap">
+                    <img id="coverImagePreview" class="cover-image-preview hidden" src="" alt="Manga cover preview" />
+                    <div id="coverImagePlaceholder" class="cover-image-placeholder">Cover image is not set yet.</div>
+                  </div>
+                  <div class="cover-image-controls">
+                    <input
+                      id="coverImageInput"
+                      class="cover-image-input-native"
+                      name="cover_image"
+                      type="file"
+                      accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                    />
+                    <label for="coverImageInput" class="cover-file-btn">Choose File</label>
+                    <span id="coverImageFileName" class="cover-file-name">No file chosen</span>
+                    <button
+                      id="coverImageClearBtn"
+                      type="button"
+                      class="cover-clear-btn hidden"
+                      aria-label="Clear selected cover image"
+                      title="Clear selected file"
+                    >
+                      <span aria-hidden="true">x</span>
+                    </button>
+                  </div>
+                  <div id="coverImageCurrentUrl" class="cover-image-current-url hidden"></div>
+                </div>
+              </label>
+            </div>
+          </section>
+          <section class="manga-form-secondary form-grid">
+            <label><span>Age Rating</span><input id="ageRatingInput" name="age_rating" type="text" /></label>
+            <label><span>Japanese Title</span><input id="japaneseTitleInput" name="japanese_title" type="text" /></label>
+            <label><span>BISAC</span><input id="bisacInput" name="bisac" type="text" /></label>
+            <label><span>Sales Restriction</span><input id="salesRestrictionInput" name="sales_restriction" type="text" /></label>
+            <label><span>Keywords (comma separated)</span><input id="keywordsInput" name="keywords" type="text" /></label>
+            <label><span>Copyright</span><input id="copyrightInput" name="copyright" type="text" /></label>
+          </section>
         </div>
         <div class="form-actions">
           <button id="cancelMangaBtn" type="button" class="admin-btn admin-btn-secondary">Cancel</button>
-          <button id="saveMangaBtn" type="submit" class="admin-btn">Save Manga</button>
+          <button id="saveMangaBtn" type="submit" class="admin-btn">Save</button>
         </div>
       </form>
     </div>
   </section>
 
-  <section id="contentDrawer" class="drawer-shell hidden" aria-hidden="true">
-    <div class="drawer-backdrop" data-close-drawer="true"></div>
-    <div class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
-      <div class="drawer-head">
-        <div>
-          <h2 id="drawerTitle">Manga Content</h2>
-          <p id="drawerSubtitle"></p>
-        </div>
-        <button id="closeDrawerBtn" type="button" class="modal-close" aria-label="Close">X</button>
-      </div>
+  <section id="contentPanelStaging" class="hidden" aria-hidden="true">
+    <div id="contentPanel" class="content-inline-panel" role="region" aria-label="Content">
       <section id="contentError" class="admin-banner admin-banner-error hidden" role="alert"></section>
       <section class="drawer-controls">
-        <button id="addContentBtn" type="button" class="admin-btn">Add Content</button>
+        <button id="addContentBtn" type="button" class="admin-btn" title="Add New Manga Content" aria-label="Add New Manga Content">Add New</button>
       </section>
       <div class="admin-grid-wrap">
         <table class="admin-grid child-grid">
           <thead>
             <tr>
-              <th>Content Key</th>
+              <th class="col-cover">&nbsp;</th>
               <th>Type</th>
               <th>Seq</th>
               <th>Title</th>
               <th>Format</th>
-              <th class="col-action">Actions</th>
+              <th class="col-action">&nbsp;</th>
             </tr>
           </thead>
           <tbody id="contentTableBody"></tbody>
@@ -149,28 +182,98 @@
     <div class="modal-backdrop" data-close-content-modal="true"></div>
     <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="contentModalTitle">
       <div class="modal-head">
-        <h2 id="contentModalTitle">Edit MangaContent</h2>
+        <h2 id="contentModalTitle">Edit Content</h2>
         <button id="closeContentModalBtn" type="button" class="modal-close" aria-label="Close">X</button>
       </div>
       <section id="contentModalError" class="admin-banner admin-banner-error hidden" role="alert"></section>
       <form id="contentForm" class="admin-form">
-        <div class="form-grid">
-          <label><span>Manga ID</span><input id="contentMangaIdInput" name="manga_id" type="text" required readonly /></label>
-          <label><span>Content Key</span><input id="contentKeyInput" name="content_key" type="text" required /></label>
-          <label><span>Type</span><input id="contentTypeInput" name="content_type" type="text" placeholder="volume or chapter" /></label>
-          <label><span>Sequence Number</span><input id="sequenceNumberInput" name="sequence_number" type="number" min="1" /></label>
-          <label class="span-2"><span>Title</span><input id="contentTitleInput" name="title" type="text" /></label>
-          <label><span>External Content ID</span><input id="externalContentIdInput" name="external_content_id" type="text" /></label>
-          <label><span>Author</span><input id="contentAuthorInput" name="author" type="text" /></label>
-          <label><span>Price</span><input id="priceInput" name="price" type="text" /></label>
-          <label><span>File Format</span><input id="fileFormatInput" name="file_format" type="text" /></label>
-          <label class="span-2"><span>Cover URL</span><input id="contentCoverUrlInput" name="cover_url" type="text" /></label>
-          <label class="span-2"><span>File URL</span><input id="fileUrlInput" name="file_url" type="text" /></label>
-          <label class="span-2"><span>Synopsis</span><textarea id="contentSynopsisInput" name="synopsis" rows="3"></textarea></label>
+        <input id="contentMangaIdInput" name="manga_id" type="hidden" />
+        <input id="contentKeyInput" name="content_key" type="hidden" />
+        <input id="contentCoverUrlInput" name="cover_url" type="hidden" />
+        <input id="fileUrlInput" name="file_url" type="hidden" />
+        <div class="manga-form-layout">
+          <section class="manga-form-top">
+            <div class="manga-form-primary">
+              <label>
+                <span>Type</span>
+                <select id="contentTypeInput" name="content_type" required>
+                  <option value="Volume">Volume</option>
+                  <option value="Chapter">Chapter</option>
+                </select>
+              </label>
+              <label><span>Sequence Number</span><input id="sequenceNumberInput" name="sequence_number" type="number" min="1" /></label>
+              <label><span>Title</span><input id="contentTitleInput" name="title" type="text" /></label>
+              <label><span>External Content ID</span><input id="externalContentIdInput" name="external_content_id" type="text" /></label>
+              <label><span>Author</span><input id="contentAuthorInput" name="author" type="text" /></label>
+              <label><span>Price</span><input id="priceInput" name="price" type="text" /></label>
+              <label><span>File Format</span><input id="fileFormatInput" name="file_format" type="text" /></label>
+            </div>
+            <div class="manga-form-cover content-upload-stack">
+              <section class="upload-block">
+                <h3 class="upload-block-title">Cover Image</h3>
+                <div class="cover-image-field">
+                  <div id="contentCoverImagePreviewWrap" class="cover-image-preview-wrap">
+                    <img id="contentCoverImagePreview" class="cover-image-preview hidden" src="" alt="Content cover preview" />
+                    <div id="contentCoverImagePlaceholder" class="cover-image-placeholder">Cover image is not set yet.</div>
+                  </div>
+                  <div class="cover-image-controls">
+                    <input
+                      id="contentCoverImageInput"
+                      class="cover-image-input-native"
+                      name="content_cover_image"
+                      type="file"
+                      accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                    />
+                    <label for="contentCoverImageInput" class="cover-file-btn">Choose File</label>
+                    <span id="contentCoverImageFileName" class="cover-file-name">No file chosen</span>
+                    <button
+                      id="contentCoverImageClearBtn"
+                      type="button"
+                      class="cover-clear-btn hidden"
+                      aria-label="Clear selected content cover image"
+                      title="Clear selected file"
+                    >
+                      <span aria-hidden="true">x</span>
+                    </button>
+                  </div>
+                  <div id="contentCoverImageCurrentUrl" class="cover-image-current-url hidden"></div>
+                </div>
+              </section>
+              <section class="upload-block">
+                <h3 class="upload-block-title">Content File</h3>
+                <div class="cover-image-field">
+                  <div class="cover-image-controls">
+                    <input
+                      id="contentFileInput"
+                      class="cover-image-input-native"
+                      name="content_file"
+                      type="file"
+                      accept=".pdf,.epub,application/pdf,application/epub+zip"
+                    />
+                    <label for="contentFileInput" class="cover-file-btn">Choose File</label>
+                    <span id="contentFileName" class="cover-file-name">No file chosen</span>
+                    <button
+                      id="contentFileClearBtn"
+                      type="button"
+                      class="cover-clear-btn hidden"
+                      aria-label="Clear selected content file"
+                      title="Clear selected file"
+                    >
+                      <span aria-hidden="true">x</span>
+                    </button>
+                  </div>
+                  <div id="contentFileCurrentUrl" class="cover-image-current-url hidden"></div>
+                </div>
+              </section>
+            </div>
+          </section>
+          <section class="manga-form-secondary form-grid">
+            <label class="span-2"><span>Synopsis</span><textarea id="contentSynopsisInput" name="synopsis" rows="3"></textarea></label>
+          </section>
         </div>
         <div class="form-actions">
           <button id="cancelContentBtn" type="button" class="admin-btn admin-btn-secondary">Cancel</button>
-          <button id="saveContentBtn" type="submit" class="admin-btn">Save Content</button>
+          <button id="saveContentBtn" type="submit" class="admin-btn">Save</button>
         </div>
       </form>
     </div>

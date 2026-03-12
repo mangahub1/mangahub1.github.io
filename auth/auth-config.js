@@ -20,6 +20,10 @@ export const appAuthzConfig = {
     "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-manga-content-upload-url",
 };
 
+export const appUploadConfig = {
+  mangaCoverMaxUploadBytes: 3 * 1024 * 1024,
+};
+
 export const authStorageKeys = {
   codeVerifier: "blupetal.auth.pkce_verifier",
   state: "blupetal.auth.state",

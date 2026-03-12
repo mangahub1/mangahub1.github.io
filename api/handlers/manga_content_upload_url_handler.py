@@ -1,4 +1,5 @@
 import logging
+import os
 
 from botocore.exceptions import ClientError
 
@@ -8,6 +9,12 @@ from utils.s3_uploads import build_manga_content_file_key, generate_upload_url
 
 LOG = logging.getLogger()
 LOG.setLevel(logging.INFO)
+MAX_MANGA_CONTENT_COVER_UPLOAD_BYTES = int(
+    os.environ.get("MAX_MANGA_CONTENT_COVER_UPLOAD_BYTES", str(3 * 1024 * 1024))
+)
+MAX_MANGA_CONTENT_FILE_UPLOAD_BYTES = int(
+    os.environ.get("MAX_MANGA_CONTENT_FILE_UPLOAD_BYTES", str(1536 * 1024 * 1024))
+)
 
 
 def lambda_handler(event, context):
@@ -26,6 +33,7 @@ def lambda_handler(event, context):
     file_kind = str(payload.get("file_kind", "")).strip().lower()
     file_name = str(payload.get("file_name", "")).strip()
     content_type = str(payload.get("content_type", "")).strip()
+    file_size_raw = payload.get("file_size")
     manga_slug = str(payload.get("manga_slug", "")).strip()
 
     if not manga_id:
@@ -38,6 +46,26 @@ def lambda_handler(event, context):
         return error(event, 400, "file_name is required.", methods="OPTIONS,POST")
     if not content_type:
         return error(event, 400, "content_type is required.", methods="OPTIONS,POST")
+    try:
+        file_size = int(file_size_raw)
+    except (TypeError, ValueError):
+        return error(event, 400, "file_size is required and must be an integer.", methods="OPTIONS,POST")
+    if file_size <= 0:
+        return error(event, 400, "file_size must be greater than 0.", methods="OPTIONS,POST")
+
+    max_upload_bytes = (
+        MAX_MANGA_CONTENT_COVER_UPLOAD_BYTES
+        if file_kind == "cover"
+        else MAX_MANGA_CONTENT_FILE_UPLOAD_BYTES
+    )
+    if file_size > max_upload_bytes:
+        max_mb = max_upload_bytes / (1024 * 1024)
+        return error(
+            event,
+            400,
+            f"{file_kind.capitalize()} exceeds max upload size ({max_mb:g} MB).",
+            methods="OPTIONS,POST",
+        )
 
     try:
         key, normalized_content_type = build_manga_content_file_key(
@@ -59,4 +87,5 @@ def lambda_handler(event, context):
     upload_payload["manga_id"] = manga_id
     upload_payload["content_key"] = content_key
     upload_payload["file_kind"] = file_kind
+    upload_payload["max_upload_bytes"] = max_upload_bytes
     return success(event, upload_payload, methods="OPTIONS,POST")
