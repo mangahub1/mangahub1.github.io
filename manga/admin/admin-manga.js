@@ -431,6 +431,58 @@ function deriveFileFormatFromName(fileName) {
   return "";
 }
 
+function hasUploadedContentFile(item) {
+  return Boolean(String(item?.file_url || "").trim());
+}
+
+function isPdfContentItem(item) {
+  const fileUrl = String(item?.file_url || "").trim();
+  if (!fileUrl) return false;
+  const normalizedFormat = String(item?.file_format || "").trim().toLowerCase();
+  if (normalizedFormat === "pdf") return true;
+  const filePath = fileUrl.split("?")[0].split("#")[0].toLowerCase();
+  return filePath.endsWith(".pdf");
+}
+
+function getContentFileStatusLabel(item) {
+  const hasFile = hasUploadedContentFile(item);
+  const format = String(item?.file_format || "").trim().toUpperCase();
+  if (format) {
+    return `${format} - ${hasFile ? "Uploaded" : "No file"}`;
+  }
+  return hasFile ? "Uploaded" : "No file";
+}
+
+function buildReaderPreviewUrl(item) {
+  const pdfUrl = String(item?.file_url || "").trim();
+  if (!pdfUrl) return "";
+
+  const url = new URL("../../library.html", window.location.href);
+  const title = String(item?.title || item?.content_key || "Preview").trim();
+  if (title) {
+    url.searchParams.set("title", title);
+  }
+
+  const coverUrl = String(item?.cover_url || "").trim();
+  if (coverUrl) {
+    url.searchParams.set("cover", coverUrl);
+  }
+
+  url.searchParams.set("source", "admin");
+  url.searchParams.set("pdf", pdfUrl);
+  return url.toString();
+}
+
+function openContentInReader(item) {
+  const readerUrl = buildReaderPreviewUrl(item);
+  if (!readerUrl) {
+    showContentPanelError("This content does not have a file URL yet.");
+    return;
+  }
+
+  window.location.assign(readerUrl);
+}
+
 function formatBytesAsMb(bytes) {
   const mb = Number(bytes) / (1024 * 1024);
   const rounded = Math.round(mb * 10) / 10;
@@ -955,22 +1007,37 @@ function renderContentGrid() {
 
   const fragment = document.createDocumentFragment();
   state.contentItems.forEach((item) => {
+    const contentKey = escapeHtml(item.content_key);
+    const fileStatusLabel = getContentFileStatusLabel(item);
+    const canViewInReader = isPdfContentItem(item);
     const row = document.createElement("tr");
     row.innerHTML = `
       <td class="col-cover-cell">${renderCoverThumb(item.cover_url, item.title || item.content_key)}</td>
       <td>${escapeHtml(item.content_type || "-")}</td>
       <td>${escapeHtml(item.sequence_number || "-")}</td>
       <td>${escapeHtml(item.title || "-")}</td>
-      <td>${escapeHtml(item.file_format || "-")}</td>
+      <td>${escapeHtml(fileStatusLabel)}</td>
       <td class="col-action-cell">
         <div class="row-actions">
-          <button type="button" class="row-action-btn icon-action-btn" data-edit-content="${escapeHtml(item.content_key)}" title="Edit" aria-label="Edit">
+          ${
+            canViewInReader
+              ? `
+          <button type="button" class="row-action-btn icon-action-btn" data-view-content="${contentKey}" title="View PDF" aria-label="View PDF">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M2 12s3.8-6 10-6 10 6 10 6-3.8 6-10 6-10-6-10-6z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </button>
+          `
+              : ""
+          }
+          <button type="button" class="row-action-btn icon-action-btn" data-edit-content="${contentKey}" title="Edit" aria-label="Edit">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M4 20h4l10-10-4-4L4 16v4z"></path>
               <path d="M13 7l4 4"></path>
             </svg>
           </button>
-          <button type="button" class="row-action-btn icon-action-btn icon-delete-btn" data-delete-content="${escapeHtml(item.content_key)}" title="Delete" aria-label="Delete">
+          <button type="button" class="row-action-btn icon-action-btn icon-delete-btn" data-delete-content="${contentKey}" title="Delete" aria-label="Delete">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1h4a1 1 0 1 1 0 2h-1l-.78 11.2A2 2 0 0 1 15.22 19H8.78a2 2 0 0 1-1.99-1.8L6 6H5a1 1 0 1 1 0-2h4zm2 0h2V3h-2v1zm-1 4a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0V9a1 1 0 0 0-1-1zm4 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0V9a1 1 0 0 0-1-1z"></path>
             </svg>
@@ -1278,6 +1345,17 @@ function wireEvents() {
   elements.contentTableBody.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
+
+    const viewBtn = target.closest("[data-view-content]");
+    if (viewBtn instanceof Element) {
+      const contentKey = String(viewBtn.getAttribute("data-view-content") || "").trim();
+      const item = state.contentItems.find((entry) => entry.content_key === contentKey);
+      if (item) {
+        clearContentPanelError();
+        openContentInReader(item);
+      }
+      return;
+    }
 
     const editBtn = target.closest("[data-edit-content]");
     if (editBtn instanceof Element) {

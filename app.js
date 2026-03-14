@@ -22,7 +22,6 @@ const state = {
   contentItems: [],
   librarySections: [],
   availableGenres: [],
-  searchQuery: "",
   selectedGenre: "",
   activeItem: null,
   eventsBound: false,
@@ -57,7 +56,6 @@ const elements = {
   accountAvatar: document.getElementById("accountAvatar"),
   welcomeMessage: document.getElementById("welcomeMessage"),
   accountIconSvg: document.querySelector(".settings-trigger .library-icon-svg"),
-  searchInput: document.getElementById("librarySearchInput"),
   genreFilters: document.getElementById("libraryGenreFilters"),
 };
 
@@ -282,38 +280,21 @@ function renderLibrary() {
     return;
   }
 
-  const normalizedQuery = state.searchQuery.trim().toLowerCase();
-  const hasActiveFilters = Boolean(normalizedQuery || state.selectedGenre);
+  const hasActiveFilters = Boolean(state.selectedGenre);
   const filteredItems = state.contentItems.filter((item) => {
     const matchesGenre = !state.selectedGenre || item.genres.includes(state.selectedGenre);
-    if (!matchesGenre) {
-      return false;
-    }
-
-    if (!normalizedQuery) {
-      return true;
-    }
-
-    const haystack = [
-      item.title,
-      item.description,
-      ...(Array.isArray(item.genres) ? item.genres : []),
-    ]
-      .join(" ")
-      .toLowerCase();
-    return haystack.includes(normalizedQuery);
+    return matchesGenre;
   });
 
   if (!filteredItems.length) {
-    elements.libraryGrid.innerHTML =
-      '<p class="library-empty">No matches found. Try a different keyword or genre.</p>';
+    elements.libraryGrid.innerHTML = '<p class="library-empty">No matches found. Try a different genre.</p>';
     return;
   }
 
   const fragment = document.createDocumentFragment();
 
   const sectionsToRender = hasActiveFilters
-    ? [{ id: "__filtered__", title: "Search Results" }]
+    ? [{ id: "__filtered__", title: "Filtered Results" }]
     : state.librarySections.length
     ? state.librarySections
     : [{ id: "all", title: "All Manga" }];
@@ -412,9 +393,20 @@ function updateReaderBackLink() {
   if (!elements.libraryLink) {
     return;
   }
-  if (state.activeItem?.id) {
+
+  const params = new URLSearchParams(window.location.search);
+  const source = String(params.get("source") || "").trim().toLowerCase();
+  if (source === "admin") {
+    elements.libraryLink.href = "./manga/admin/admin-manga.html";
+    elements.libraryLink.setAttribute("aria-label", "Back to manga admin");
+    return;
+  }
+
+  const activeId = String(state.activeItem?.id || "").trim();
+  const isCatalogItem = Boolean(activeId) && state.contentItems.some((entry) => entry.id === activeId);
+  if (isCatalogItem) {
     elements.libraryLink.href = `./manga/manga.html?manga=${encodeURIComponent(
-      state.activeItem.id
+      activeId
     )}`;
     elements.libraryLink.setAttribute("aria-label", `Back to ${state.activeItem.title}`);
   } else {
@@ -958,15 +950,6 @@ function wireEvents() {
       return;
     }
     void openMangaById(mangaId, false, fallbackItem);
-  });
-
-  elements.searchInput?.addEventListener("input", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement)) {
-      return;
-    }
-    state.searchQuery = target.value || "";
-    renderLibrary();
   });
 
   elements.genreFilters?.addEventListener("click", (event) => {

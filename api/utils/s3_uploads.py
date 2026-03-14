@@ -57,7 +57,8 @@ def s3_key_to_public_http_url(bucket, key):
     key_encoded = "/".join(quote(part, safe="") for part in str(key).split("/"))
     if CONTENT_PUBLIC_BASE_URL:
         return f"{CONTENT_PUBLIC_BASE_URL}/{key_encoded}"
-    return f"https://{bucket}.s3.amazonaws.com/{key_encoded}"
+    # Default to a root-relative URL so callers can resolve against the app/CDN origin.
+    return f"/{key_encoded}"
 
 
 def build_manga_cover_key(manga_id, file_name, content_type, manga_slug=""):
