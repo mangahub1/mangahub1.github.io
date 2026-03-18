@@ -10,6 +10,7 @@ import {
 import {
   clearAuthSession,
   getJwtEmail,
+  getJwtFamilyName,
   getJwtExpiry,
   getJwtGivenName,
   getJwtName,
@@ -94,7 +95,7 @@ async function exchangeAuthorizationCodeForTokens(code, codeVerifier) {
   return JSON.parse(raw);
 }
 
-async function validateUserPermission({ email, name, given_name, image, accessToken }) {
+async function validateUserPermission({ email, name, given_name, family_name, image, accessToken }) {
   const endpoint = appAuthzConfig.validateUserEndpoint;
   const payload = {};
   if (email) {
@@ -105,6 +106,9 @@ async function validateUserPermission({ email, name, given_name, image, accessTo
   }
   if (given_name) {
     payload.given_name = given_name;
+  }
+  if (family_name) {
+    payload.family_name = family_name;
   }
   if (image) {
     payload.image = image;
@@ -139,6 +143,43 @@ function markFailure(status, message) {
 
 function continueToLibrary() {
   window.location.replace(getPostLoginUrl());
+}
+
+function inferFamilyName(name, givenName, familyName) {
+  const explicitFamilyName = String(familyName || "").trim();
+  if (explicitFamilyName) {
+    return explicitFamilyName;
+  }
+
+  const fullName = String(name || "").trim();
+  const firstName = String(givenName || "").trim();
+  if (!fullName) {
+    return "";
+  }
+
+  if (fullName.includes(",")) {
+    const last = fullName.split(",")[0]?.trim() || "";
+    if (last) {
+      return last;
+    }
+  }
+
+  if (firstName) {
+    const normalizedFull = fullName.toLowerCase();
+    const normalizedFirst = firstName.toLowerCase();
+    if (normalizedFull.startsWith(`${normalizedFirst} `)) {
+      const remainder = fullName.slice(firstName.length).trim();
+      if (remainder) {
+        return remainder;
+      }
+    }
+  }
+
+  const parts = fullName.split(/\s+/).filter(Boolean);
+  if (parts.length > 1) {
+    return parts[parts.length - 1];
+  }
+  return "";
 }
 
 async function handleCognitoCallback() {
@@ -199,6 +240,11 @@ async function handleCognitoCallback() {
     const emailFromIdToken = getJwtEmail(idToken);
     const nameFromIdToken = getJwtName(idToken);
     const givenNameFromIdToken = getJwtGivenName(idToken);
+    const familyNameFromIdToken = inferFamilyName(
+      nameFromIdToken,
+      givenNameFromIdToken,
+      getJwtFamilyName(idToken)
+    );
     const imageFromIdToken = getJwtPicture(idToken);
 
     if (!idToken) {
@@ -220,6 +266,7 @@ async function handleCognitoCallback() {
         email: emailFromIdToken,
         name: nameFromIdToken,
         given_name: givenNameFromIdToken,
+        family_name: familyNameFromIdToken,
         image: imageFromIdToken,
         accessToken,
       });
@@ -230,6 +277,7 @@ async function handleCognitoCallback() {
     const user = validation?.user || {};
     const email = String(user?.email || emailFromIdToken || "").trim();
     const givenName = String(user?.given_name || givenNameFromIdToken || "").trim();
+    const familyName = String(user?.family_name || familyNameFromIdToken || "").trim();
     const image = String(user?.image || imageFromIdToken || "").trim();
     const role = String(user?.role || "").trim();
     const admin = Number(user?.admin ?? 0);
@@ -248,6 +296,7 @@ async function handleCognitoCallback() {
         role,
         admin,
         givenName,
+        familyName,
         image,
         status: 1,
         isAdmin,

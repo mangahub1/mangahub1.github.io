@@ -41,7 +41,7 @@
 .admin-controls {
   margin-top: 1rem;
   display: grid;
-  grid-template-columns: 200px 110px minmax(220px, 1fr) auto auto;
+  grid-template-columns: 200px 110px 140px minmax(220px, 1fr) auto auto;
   gap: 0.7rem;
   align-items: end;
 }
@@ -110,14 +110,6 @@
   overflow: hidden;
 }
 
-.admin-grid-meta {
-  padding: 0.7rem 0.9rem;
-  border-bottom: 1px solid #e6eaf1;
-  background: #fafbfd;
-  color: #57637a;
-  font-size: 0.87rem;
-}
-
 .admin-grid-wrap {
   overflow: auto;
 }
@@ -125,7 +117,7 @@
 .admin-grid {
   width: 100%;
   border-collapse: collapse;
-  min-width: 960px;
+  min-width: 1100px;
 }
 
 .admin-grid th,
@@ -148,6 +140,44 @@
   letter-spacing: 0.03em;
 }
 
+.col-sortable .sort-header-btn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0.08rem 0.2rem;
+  text-decoration: none;
+}
+
+.col-sortable .sort-header-btn:hover:not(:disabled) {
+  background: #eaf1ff;
+  color: #1f3760;
+}
+
+.col-sortable .sort-header-btn:focus-visible {
+  outline: 2px solid #2d67d6;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.sort-header-label {
+  white-space: nowrap;
+  text-decoration: underline;
+  text-underline-offset: 0.17rem;
+}
+
+.sort-arrow {
+  min-width: 0.75rem;
+  font-size: 0.65rem;
+  line-height: 1;
+}
+
+.sort-header-btn.is-active {
+  color: #26344f;
+}
+
 .col-select {
   width: 44px;
 }
@@ -160,8 +190,16 @@
   width: 112px;
 }
 
+.col-last-login {
+  min-width: 180px;
+}
+
 .avatar-cell {
   width: 40px;
+}
+
+.last-login-cell {
+  white-space: nowrap;
 }
 
 .user-avatar {

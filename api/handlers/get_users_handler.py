@@ -59,6 +59,8 @@ def _normalize_user(item):
     return {
         "user_id": str(item.get("user_id", "")).strip(),
         "name": str(item.get("name", "")).strip(),
+        "given_name": str(item.get("given_name", "")).strip(),
+        "family_name": str(item.get("family_name", "")).strip(),
         "email": str(item.get("email", "")).strip().lower(),
         "image": str(item.get("image", "")).strip(),
         "status": _normalize_number(item.get("status"), default=-1),
@@ -99,7 +101,7 @@ def lambda_handler(event, context):
 
     users = []
     scan_args = {
-        "ProjectionExpression": "#user_id, #name, email, image, #status, admin, provider, last_login, requested_at, approved_at, created_at",
+        "ProjectionExpression": "#user_id, #name, given_name, family_name, email, image, #status, admin, provider, last_login, requested_at, approved_at, created_at",
         "ExpressionAttributeNames": {
             "#user_id": "user_id",
             "#name": "name",
@@ -131,7 +133,13 @@ def lambda_handler(event, context):
     normalized.sort(
         key=lambda user: (
             0 if user["status"] == -1 else 1,
-            user["name"] or user["email"] or user["user_id"],
+            (
+                f"{user['family_name']}, {user['given_name']}"
+                if user["family_name"] and user["given_name"]
+                else user["name"]
+            )
+            or user["email"]
+            or user["user_id"],
         )
     )
 

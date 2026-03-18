@@ -64,6 +64,8 @@ def _normalize_user(item):
     return {
         "user_id": str(item.get("user_id", "")).strip(),
         "name": str(item.get("name", "")).strip(),
+        "given_name": str(item.get("given_name", "")).strip(),
+        "family_name": str(item.get("family_name", "")).strip(),
         "email": str(item.get("email", "")).strip().lower(),
         "status": _normalize_number(item.get("status"), default=-1),
         "admin": _normalize_number(item.get("admin"), default=0),

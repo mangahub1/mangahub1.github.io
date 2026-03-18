@@ -12,6 +12,8 @@ const state = {
   filteredUsers: [],
   session: null,
   busy: false,
+  sortKey: "name",
+  sortDirection: "asc",
 };
 
 const elements = {
@@ -19,12 +21,18 @@ const elements = {
   success: document.getElementById("adminSuccess"),
   statusFilter: document.getElementById("statusFilter"),
   adminFilter: document.getElementById("adminFilter"),
+  loginFilter: document.getElementById("loginFilter"),
   searchInput: document.getElementById("searchInput"),
   refreshBtn: document.getElementById("refreshBtn"),
   approveSelectedBtn: document.getElementById("approveSelectedBtn"),
   tableBody: document.getElementById("usersTableBody"),
-  resultsCount: document.getElementById("resultsCount"),
   selectAll: document.getElementById("selectAll"),
+  nameSortHeader: document.getElementById("nameSortHeader"),
+  nameSortBtn: document.getElementById("nameSortBtn"),
+  nameSortArrow: document.getElementById("nameSortArrow"),
+  lastLoginSortHeader: document.getElementById("lastLoginSortHeader"),
+  lastLoginSortBtn: document.getElementById("lastLoginSortBtn"),
+  lastLoginSortArrow: document.getElementById("lastLoginSortArrow"),
   signoutLinks: document.querySelectorAll(".settings-item.signout"),
   accountAvatar: document.getElementById("accountAvatar"),
   welcomeMessage: document.getElementById("welcomeMessage"),
@@ -74,6 +82,159 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function formatUtcToLocalDateTime(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return "-";
+  }
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return "-";
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
+}
+
+function isLastLoginWithinRange(lastLogin, range) {
+  const selectedRange = String(range || "").trim();
+  if (!selectedRange) {
+    return true;
+  }
+
+  const raw = String(lastLogin || "").trim();
+  if (!raw) {
+    return false;
+  }
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return false;
+  }
+
+  const rangeToMs = {
+    "1d": 24 * 60 * 60 * 1000,
+    "3d": 3 * 24 * 60 * 60 * 1000,
+    "1w": 7 * 24 * 60 * 60 * 1000,
+    "1m": 30 * 24 * 60 * 60 * 1000,
+  };
+  const maxAgeMs = rangeToMs[selectedRange];
+  if (!maxAgeMs) {
+    return true;
+  }
+  const ageMs = Date.now() - parsed.getTime();
+  return ageMs >= 0 && ageMs < maxAgeMs;
+}
+
+function buildUserDisplayName(user) {
+  const familyName = String(user?.family_name || "").trim();
+  const givenName = String(user?.given_name || "").trim();
+  const fullName = String(user?.name || "").trim();
+  if (familyName && givenName) {
+    return `${familyName}, ${givenName}`;
+  }
+  if (familyName) {
+    return familyName;
+  }
+  if (givenName) {
+    return givenName;
+  }
+  return fullName;
+}
+
+function buildUserSortName(user) {
+  return String(buildUserDisplayName(user) || user?.email || user?.user_id || "").toLowerCase();
+}
+
+function getLastLoginTimestamp(user) {
+  const raw = String(user?.last_login || "").trim();
+  if (!raw) {
+    return null;
+  }
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed.getTime();
+}
+
+function compareUsersByName(a, b) {
+  const byName = buildUserSortName(a).localeCompare(buildUserSortName(b));
+  if (byName !== 0) {
+    return byName;
+  }
+  const aEmail = String(a?.email || "").toLowerCase();
+  const bEmail = String(b?.email || "").toLowerCase();
+  if (aEmail !== bEmail) {
+    return aEmail.localeCompare(bEmail);
+  }
+  return String(a?.user_id || "").localeCompare(String(b?.user_id || ""));
+}
+
+function compareUsersByLastLogin(a, b) {
+  const aTs = getLastLoginTimestamp(a);
+  const bTs = getLastLoginTimestamp(b);
+  if (aTs == null && bTs == null) {
+    return compareUsersByName(a, b);
+  }
+  if (aTs == null) {
+    return 1;
+  }
+  if (bTs == null) {
+    return -1;
+  }
+  if (aTs !== bTs) {
+    return aTs - bTs;
+  }
+  return compareUsersByName(a, b);
+}
+
+function sortFilteredUsers() {
+  const direction = state.sortDirection === "desc" ? -1 : 1;
+  state.filteredUsers.sort((a, b) => {
+    if (state.sortKey === "last_login") {
+      return direction * compareUsersByLastLogin(a, b);
+    }
+    return direction * compareUsersByName(a, b);
+  });
+}
+
+function updateSortHeaderUi() {
+  const isNameSort = state.sortKey === "name";
+  const isLastLoginSort = state.sortKey === "last_login";
+  const arrow = state.sortDirection === "desc" ? "\u25BC" : "\u25B2";
+
+  if (elements.nameSortHeader) {
+    elements.nameSortHeader.setAttribute("aria-sort", isNameSort ? (state.sortDirection === "desc" ? "descending" : "ascending") : "none");
+  }
+  if (elements.lastLoginSortHeader) {
+    elements.lastLoginSortHeader.setAttribute("aria-sort", isLastLoginSort ? (state.sortDirection === "desc" ? "descending" : "ascending") : "none");
+  }
+  if (elements.nameSortArrow) {
+    elements.nameSortArrow.textContent = isNameSort ? arrow : "";
+  }
+  if (elements.lastLoginSortArrow) {
+    elements.lastLoginSortArrow.textContent = isLastLoginSort ? arrow : "";
+  }
+  if (elements.nameSortBtn) {
+    elements.nameSortBtn.classList.toggle("is-active", isNameSort);
+  }
+  if (elements.lastLoginSortBtn) {
+    elements.lastLoginSortBtn.classList.toggle("is-active", isLastLoginSort);
+  }
+}
+
+function toggleSort(nextKey) {
+  if (state.sortKey === nextKey) {
+    state.sortDirection = state.sortDirection === "asc" ? "desc" : "asc";
+  } else {
+    state.sortKey = nextKey;
+    state.sortDirection = "asc";
+  }
+  updateSortHeaderUi();
+  applyFilters();
 }
 
 function ensureAdminSession() {
@@ -171,6 +332,7 @@ function updateApproveSelectedState() {
 function applyFilters() {
   const statusFilter = String(elements.statusFilter.value || "").trim();
   const adminFilter = String(elements.adminFilter.value || "").trim();
+  const loginFilter = String(elements.loginFilter?.value || "").trim();
   const search = String(elements.searchInput.value || "").trim().toLowerCase();
 
   state.filteredUsers = state.users.filter((user) => {
@@ -182,16 +344,21 @@ function applyFilters() {
     if (adminFilter && userAdmin !== normalizeNumber(adminFilter, -999)) {
       return false;
     }
+    if (!isLastLoginWithinRange(user.last_login, loginFilter)) {
+      return false;
+    }
 
     if (!search) {
       return true;
     }
 
     const name = String(user.name || "").toLowerCase();
+    const displayName = buildUserDisplayName(user).toLowerCase();
     const email = String(user.email || "").toLowerCase();
-    return name.includes(search) || email.includes(search);
+    return name.includes(search) || displayName.includes(search) || email.includes(search);
   });
 
+  sortFilteredUsers();
   renderUsers();
 }
 
@@ -234,11 +401,10 @@ function renderUsers() {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
     cell.className = "admin-grid-empty";
-    cell.colSpan = 7;
+    cell.colSpan = 8;
     cell.textContent = "No users match the selected filters.";
     row.appendChild(cell);
     elements.tableBody.appendChild(row);
-    elements.resultsCount.textContent = "0 users";
     updateApproveSelectedState();
     return;
   }
@@ -246,9 +412,11 @@ function renderUsers() {
   const fragment = document.createDocumentFragment();
   state.filteredUsers.forEach((user) => {
     const userId = String(user.user_id || "").trim();
-    const userName = String(user.name || "").trim();
+    const userName = buildUserDisplayName(user);
     const userEmail = String(user.email || "").trim();
     const userImage = String(user.image || "").trim();
+    const userLastLoginRaw = String(user.last_login || "").trim();
+    const userLastLoginLocal = formatUtcToLocalDateTime(userLastLoginRaw);
     const row = document.createElement("tr");
 
     const currentStatus = normalizeNumber(user.status, -1);
@@ -272,6 +440,7 @@ function renderUsers() {
       </td>
       <td>${escapeHtml(userName || "-")}</td>
       <td>${escapeHtml(userEmail || "-")}</td>
+      <td class="last-login-cell" title="${escapeHtml(userLastLoginRaw || "-")}">${escapeHtml(userLastLoginLocal)}</td>
       <td>
         <select class="status-edit" data-status-edit="${userId}" aria-label="Status for ${String(
       userEmail || userId
@@ -298,9 +467,6 @@ function renderUsers() {
   });
 
   elements.tableBody.appendChild(fragment);
-  elements.resultsCount.textContent = `${state.filteredUsers.length} user${
-    state.filteredUsers.length === 1 ? "" : "s"
-  }`;
 
   elements.tableBody
     .querySelectorAll('input[data-user-select="true"]')
@@ -362,6 +528,7 @@ async function updateUsers(payload) {
     body: JSON.stringify(payload),
   });
 }
+
 
 async function refreshGrid() {
   clearError();
@@ -429,7 +596,10 @@ async function handleRowSave(row) {
 function wireEvents() {
   elements.statusFilter.addEventListener("change", applyFilters);
   elements.adminFilter.addEventListener("change", applyFilters);
+  elements.loginFilter?.addEventListener("change", applyFilters);
   elements.searchInput.addEventListener("input", applyFilters);
+  elements.nameSortBtn?.addEventListener("click", () => toggleSort("name"));
+  elements.lastLoginSortBtn?.addEventListener("click", () => toggleSort("last_login"));
   elements.refreshBtn.addEventListener("click", async () => {
     try {
       await refreshGrid();
@@ -487,6 +657,7 @@ async function init() {
     return;
   }
   wireAccountIdentity();
+  updateSortHeaderUi();
   wireEvents();
   try {
     await refreshGrid();
@@ -496,5 +667,6 @@ async function init() {
 }
 
 void init();
+
 
 

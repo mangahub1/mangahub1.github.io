@@ -4,7 +4,7 @@ from botocore.exceptions import ClientError
 
 from models.manga import MANGA_EDITABLE_FIELDS, normalize_manga_item
 from repositories import manga_repository
-from utils.api_gateway import get_param, http_method, parse_json_body
+from utils.api_gateway import get_param, http_method, parse_json_body, request_user_id
 from utils.responses import error, success
 from validators.manga_validator import validate_manga_put_payload
 from validators.manga_validator import (
@@ -102,8 +102,9 @@ def _handle_delete(event):
         return error(event, 400, " | ".join(validation_errors))
 
     manga_id = str(payload.get("manga_id", "")).strip()
+    deleted_by = request_user_id(event)
     try:
-        deleted = manga_repository.delete_by_id(manga_id)
+        deleted = manga_repository.soft_delete_by_id(manga_id, deleted_by=deleted_by)
     except ClientError as exc:
         code = exc.response.get("Error", {}).get("Code", "UnknownError")
         if code == "ConditionalCheckFailedException":

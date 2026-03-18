@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 
 import boto3
 from botocore.exceptions import ClientError
@@ -8,17 +9,34 @@ ddb = boto3.resource("dynamodb")
 manga_table = ddb.Table(MANGA_TABLE_NAME)
 
 
-def get_by_id(manga_id):
+def _is_active(item):
+    value = item.get("is_active", True)
+    if isinstance(value, str):
+        return value.strip().lower() not in {"0", "false", "no", "inactive"}
+    return bool(value)
+
+
+def get_by_id(manga_id, include_inactive=False):
     item = manga_table.get_item(Key={"manga_id": manga_id}).get("Item")
+    if not item:
+        return None
+    if include_inactive:
+        return item
+    if not _is_active(item):
+        return None
     return item
 
 
-def list_all():
+def list_all(include_inactive=False):
     items = []
     scan_args = {}
     while True:
         result = manga_table.scan(**scan_args)
-        items.extend(result.get("Items", []))
+        page_items = result.get("Items", [])
+        if include_inactive:
+            items.extend(page_items)
+        else:
+            items.extend(item for item in page_items if _is_active(item))
         last_evaluated_key = result.get("LastEvaluatedKey")
         if not last_evaluated_key:
             break
@@ -62,6 +80,7 @@ def create_new(manga_id, attributes):
 
     item = {"manga_id": manga_id}
     item.update(attributes or {})
+    item["is_active"] = True
     manga_table.put_item(
         Item=item,
         ConditionExpression="attribute_not_exists(manga_id)",
@@ -69,10 +88,24 @@ def create_new(manga_id, attributes):
     return item
 
 
-def delete_by_id(manga_id):
-    result = manga_table.delete_item(
+def soft_delete_by_id(manga_id, deleted_by=""):
+    deleted_at = datetime.now(timezone.utc).isoformat()
+    deleted_by_value = str(deleted_by or "").strip()
+    result = manga_table.update_item(
         Key={"manga_id": manga_id},
-        ConditionExpression="attribute_exists(manga_id)",
-        ReturnValues="ALL_OLD",
+        UpdateExpression="SET #is_active = :inactive, #deleted_at = :deleted_at, #deleted_by = :deleted_by",
+        ExpressionAttributeNames={
+            "#is_active": "is_active",
+            "#deleted_at": "deleted_at",
+            "#deleted_by": "deleted_by",
+        },
+        ExpressionAttributeValues={
+            ":inactive": False,
+            ":active": True,
+            ":deleted_at": deleted_at,
+            ":deleted_by": deleted_by_value,
+        },
+        ConditionExpression="attribute_exists(manga_id) AND (attribute_not_exists(is_active) OR is_active = :active)",
+        ReturnValues="ALL_NEW",
     )
     return result.get("Attributes")

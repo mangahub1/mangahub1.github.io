@@ -360,7 +360,7 @@ Optional flags:
 
 - `GET /manga`
   - Optional `manga_id` query/path param.
-  - No `manga_id`: returns all manga (scan isolated in repository layer).
+  - No `manga_id`: returns all active manga (scan isolated in repository layer).
 - `PUT /manga`
   - Requires `manga_id`.
   - Updates only editable Manga attributes.
@@ -369,11 +369,12 @@ Optional flags:
   - Creates a Manga row.
   - Returns `409` if `manga_id` already exists.
 - `DELETE /manga` (or `DELETE /delete-manga`)
-  - Deletes a Manga row by `manga_id`.
+  - Soft-deletes a Manga row by `manga_id` by setting `is_active=false`.
+  - Stores audit metadata: `deleted_at` and `deleted_by` (from auth token claims when available).
 - `GET /manga-content`
   - Requires `manga_id`.
   - Optional `content_key` to fetch one child row.
-  - Without `content_key`, uses DynamoDB `Query` by `manga_id`.
+  - Without `content_key`, uses DynamoDB `Query` by `manga_id` and returns active records only.
 - `PUT /manga-content`
   - Requires `manga_id` + `content_key`.
   - Updates only editable MangaContent attributes.
@@ -382,7 +383,8 @@ Optional flags:
   - Creates a MangaContent row.
   - Returns `409` if key already exists.
 - `DELETE /manga-content` (or `DELETE /delete-manga-content`)
-  - Deletes a MangaContent row by `manga_id` + `content_key`.
+  - Soft-deletes a MangaContent row by `manga_id` + `content_key` by setting `is_active=false`.
+  - Stores audit metadata: `deleted_at` and `deleted_by` (from auth token claims when available).
 - `POST /get-manga-upload-url`
   - Manga cover upload URL (`file_kind` must be `cover`).
 - `POST /get-manga-content-upload-url`

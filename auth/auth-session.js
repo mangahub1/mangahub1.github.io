@@ -48,6 +48,11 @@ export function getJwtGivenName(token) {
   return String(payload?.given_name || "").trim();
 }
 
+export function getJwtFamilyName(token) {
+  const payload = parseJwtPayload(token);
+  return String(payload?.family_name || "").trim();
+}
+
 export function getJwtPicture(token) {
   const payload = parseJwtPayload(token);
   return String(payload?.picture || payload?.image || "").trim();

@@ -50,3 +50,38 @@ def get_param(event, key):
     if value not in (None, ""):
         return str(value).strip()
     return ""
+
+
+def auth_claims(event):
+    claims = (
+        event.get("requestContext", {})
+        .get("authorizer", {})
+        .get("jwt", {})
+        .get("claims", {})
+    )
+    if claims:
+        return claims
+
+    alt_claims = (
+        event.get("requestContext", {})
+        .get("authorizer", {})
+        .get("claims", {})
+    )
+    return alt_claims or {}
+
+
+def request_user_id(event):
+    claims = auth_claims(event)
+    for key in ("sub", "user_id", "username", "cognito:username"):
+        value = str(claims.get(key, "")).strip()
+        if value:
+            return value
+
+    principal_id = (
+        event.get("requestContext", {})
+        .get("authorizer", {})
+        .get("principalId")
+    )
+    if principal_id not in (None, ""):
+        return str(principal_id).strip()
+    return ""
