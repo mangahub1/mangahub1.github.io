@@ -463,6 +463,8 @@ body {
 
 .reader-view {
   height: 100vh;
+  position: relative;
+  overflow: hidden;
   display: grid;
   grid-template-rows: auto 1fr auto;
 }
@@ -665,11 +667,74 @@ button:disabled {
 }
 
 .canvas-stage {
+  position: relative;
   min-height: 0;
   height: 100%;
   background: #24262c;
   padding: 0.45rem 0.5rem 0.55rem;
   overflow: auto;
+}
+
+.reader-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(165deg, #232833 0%, #1f2430 46%, #26222d 100%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: auto;
+  transition: opacity 180ms ease, visibility 180ms ease;
+  z-index: 60;
+}
+
+.reader-view.is-loading .reader-loading {
+  opacity: 1;
+  visibility: visible;
+}
+
+.reader-view.is-loading .canvas-stage {
+  overflow: hidden;
+}
+
+.reader-view.is-loading canvas {
+  visibility: hidden;
+}
+
+.reader-loading-content {
+  width: min(84vw, 340px);
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.reader-loading-logo {
+  width: min(58vw, 168px);
+  height: auto;
+}
+
+.reader-loading-spinner {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 2px solid #38445a;
+  border-top-color: #ff9f55;
+  animation: reader-spin 850ms linear infinite;
+}
+
+.reader-loading-text {
+  margin: 0;
+  font-size: 0.93rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #dbe2ef;
+}
+
+@keyframes reader-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .spread {

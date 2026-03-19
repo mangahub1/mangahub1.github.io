@@ -20,6 +20,9 @@ const state = {
   mangaItems: [],
   filteredMangaItems: [],
   contentItems: [],
+  contentItemsByManga: new Map(),
+  expandedMangaIds: new Set(),
+  loadingContentMangaIds: new Set(),
   activeManga: null,
   mangaMode: "create",
   contentMode: "create",
@@ -476,7 +479,7 @@ function buildReaderPreviewUrl(item) {
 function openContentInReader(item) {
   const readerUrl = buildReaderPreviewUrl(item);
   if (!readerUrl) {
-    showContentPanelError("This content does not have a file URL yet.");
+    showError("This content does not have a file URL yet.");
     return;
   }
 
@@ -543,112 +546,118 @@ const endpoint = {
   },
 };
 
-function ensureInlineContentRow(afterRow) {
-  if (!(afterRow instanceof HTMLTableRowElement)) return null;
-  if (!state.inlineContentRow) {
-    const row = document.createElement("tr");
-    row.className = "inline-content-row";
-    row.innerHTML = '<td colspan="6"><div class="inline-content-host"></div></td>';
-    state.inlineContentRow = row;
-    state.inlineContentHost = row.querySelector(".inline-content-host");
-  }
-  if (state.inlineContentRow.parentElement !== elements.mangaTableBody) {
-    elements.mangaTableBody.appendChild(state.inlineContentRow);
-  }
-  if (afterRow.nextSibling !== state.inlineContentRow) {
-    afterRow.insertAdjacentElement("afterend", state.inlineContentRow);
-  }
-  return state.inlineContentRow;
-}
-
-function clearInlineActiveRowStyles() {
-  const rows = elements.mangaTableBody.querySelectorAll("tr.is-content-active");
-  rows.forEach((row) => row.classList.remove("is-content-active"));
-  const buttons = elements.mangaTableBody.querySelectorAll("[data-open-content]");
-  buttons.forEach((button) => {
-    button.setAttribute("aria-expanded", "false");
-    button.setAttribute("title", "Expand Content");
-    button.setAttribute("aria-label", "Expand Content");
-    button.textContent = "\u25B8";
-  });
-}
-
-function syncInlineContentPanelPlacement() {
-  clearInlineActiveRowStyles();
-  const activeMangaId = String(state.activeManga?.manga_id || "").trim();
-  setParentGridLock(Boolean(activeMangaId));
-  if (!activeMangaId) {
-    if (state.inlineContentRow?.isConnected) {
-      state.inlineContentRow.remove();
-    }
-    if (elements.contentPanel?.parentElement !== elements.contentPanelStaging) {
-      elements.contentPanelStaging?.appendChild(elements.contentPanel);
-    }
-    syncParentRowInteractivity();
-    return;
-  }
-
-  const row = elements.mangaTableBody.querySelector(`tr[data-manga-id="${CSS.escape(activeMangaId)}"]`);
-  if (!(row instanceof HTMLTableRowElement)) {
-    if (state.inlineContentRow?.isConnected) {
-      state.inlineContentRow.remove();
-    }
-    if (elements.contentPanel?.parentElement !== elements.contentPanelStaging) {
-      elements.contentPanelStaging?.appendChild(elements.contentPanel);
-    }
-    syncParentRowInteractivity();
-    return;
-  }
-  row.classList.add("is-content-active");
-  const activeToggle = row.querySelector("[data-open-content]");
-  if (activeToggle) {
-    activeToggle.setAttribute("aria-expanded", "true");
-    activeToggle.setAttribute("title", "Collapse Content");
-    activeToggle.setAttribute("aria-label", "Collapse Content");
-    activeToggle.textContent = "\u25BE";
-  }
-  ensureInlineContentRow(row);
-  if (state.inlineContentHost && elements.contentPanel) {
-    state.inlineContentHost.appendChild(elements.contentPanel);
-  }
-  syncParentRowInteractivity();
-}
-
 function setBusy(nextBusy) {
   state.busy = nextBusy;
-  const isParentLocked = Boolean(state.activeManga?.manga_id);
-  elements.searchInput.disabled = isParentLocked;
-  elements.refreshBtn.disabled = nextBusy || isParentLocked;
-  elements.addMangaBtn.disabled = nextBusy || isParentLocked;
+  elements.searchInput.disabled = nextBusy;
+  elements.refreshBtn.disabled = nextBusy;
+  elements.addMangaBtn.disabled = nextBusy;
   elements.saveMangaBtn.disabled = nextBusy;
   elements.saveContentBtn.disabled = nextBusy;
 }
 
-function setParentGridLock(isLocked) {
-  elements.adminGridShell?.classList.toggle("is-locked", isLocked);
-  elements.searchInput.disabled = isLocked;
-  elements.refreshBtn.disabled = state.busy || isLocked;
-  elements.addMangaBtn.disabled = state.busy || isLocked;
+function setActiveMangaById(mangaId) {
+  const normalized = String(mangaId || "").trim();
+  state.activeManga = state.mangaItems.find((item) => item.manga_id === normalized) || null;
+  return state.activeManga;
 }
 
-function syncParentRowInteractivity() {
-  const isLocked = Boolean(state.activeManga?.manga_id);
-  const rows = elements.mangaTableBody.querySelectorAll(":scope > tr");
-  rows.forEach((row) => {
-    const isActive = row.classList.contains("is-content-active");
-    const toggle = row.querySelector("[data-open-content]");
-    if (toggle instanceof HTMLButtonElement) {
-      toggle.disabled = isLocked && !isActive;
-    }
-    const editBtn = row.querySelector("[data-edit-manga]");
-    if (editBtn instanceof HTMLButtonElement) {
-      editBtn.disabled = isLocked;
-    }
-    const deleteBtn = row.querySelector("[data-delete-manga]");
-    if (deleteBtn instanceof HTMLButtonElement) {
-      deleteBtn.disabled = isLocked;
-    }
+async function fetchContentForManga(mangaId) {
+  const manga = state.mangaItems.find((item) => item.manga_id === mangaId);
+  if (!manga) {
+    throw new Error("Manga not found.");
+  }
+  const url = new URL(endpoint.contentGet);
+  url.searchParams.set("manga_id", manga.manga_id);
+  const body = await requestJson(url.toString(), {
+    method: "GET",
+    headers: { Authorization: `Bearer ${state.session.accessToken}` },
   });
+  const data = responseData(body);
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return items.map(normalizeContent).sort((a, b) => a.content_key.localeCompare(b.content_key));
+}
+
+function renderInlineContentRow(mangaId) {
+  const row = document.createElement("tr");
+  row.className = "inline-content-row";
+  row.setAttribute("data-inline-content-for", mangaId);
+
+  const isLoading = state.loadingContentMangaIds.has(mangaId);
+  const contentItems = state.contentItemsByManga.get(mangaId) || [];
+  const contentRows = isLoading
+    ? '<tr><td class="admin-grid-empty" colspan="6">Loading child content...</td></tr>'
+    : !contentItems.length
+      ? '<tr><td class="admin-grid-empty" colspan="6">No child content records.</td></tr>'
+      : contentItems
+          .map((item) => {
+            const contentKey = escapeHtml(item.content_key);
+            const fileStatusLabel = getContentFileStatusLabel(item);
+            const canViewInReader = isPdfContentItem(item);
+            return `
+              <tr>
+                <td class="col-cover-cell">${renderCoverThumb(item.cover_url, item.title || item.content_key)}</td>
+                <td>${escapeHtml(item.content_type || "-")}</td>
+                <td>${escapeHtml(item.sequence_number || "-")}</td>
+                <td>${escapeHtml(item.title || "-")}</td>
+                <td>${escapeHtml(fileStatusLabel)}</td>
+                <td class="col-action-cell">
+                  <div class="row-actions">
+                    ${
+                      canViewInReader
+                        ? `
+                    <button type="button" class="row-action-btn icon-action-btn" data-view-content="${contentKey}" data-content-manga-id="${escapeHtml(mangaId)}" title="View PDF" aria-label="View PDF">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M2 12s3.8-6 10-6 10 6 10 6-3.8 6-10 6-10-6-10-6z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                    </button>
+                    `
+                        : ""
+                    }
+                    <button type="button" class="row-action-btn icon-action-btn" data-edit-content="${contentKey}" data-content-manga-id="${escapeHtml(mangaId)}" title="Edit" aria-label="Edit">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 20h4l10-10-4-4L4 16v4z"></path>
+                        <path d="M13 7l4 4"></path>
+                      </svg>
+                    </button>
+                    <button type="button" class="row-action-btn icon-action-btn icon-delete-btn" data-delete-content="${contentKey}" data-content-manga-id="${escapeHtml(mangaId)}" title="Delete" aria-label="Delete">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1h4a1 1 0 1 1 0 2h-1l-.78 11.2A2 2 0 0 1 15.22 19H8.78a2 2 0 0 1-1.99-1.8L6 6H5a1 1 0 1 1 0-2h4zm2 0h2V3h-2v1zm-1 4a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0V9a1 1 0 0 0-1-1zm4 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0V9a1 1 0 0 0-1-1z"></path>
+                      </svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          })
+          .join("");
+
+  row.innerHTML = `
+    <td colspan="6">
+      <div class="content-inline-panel" role="region" aria-label="Content">
+        <section class="drawer-controls">
+          <button type="button" class="admin-btn" data-add-content-for="${escapeHtml(mangaId)}" title="Add New Manga Content" aria-label="Add New Manga Content">Add New</button>
+        </section>
+        <div class="admin-grid-wrap">
+          <table class="admin-grid child-grid">
+            <thead>
+              <tr>
+                <th class="col-cover">&nbsp;</th>
+                <th>Type</th>
+                <th>Seq</th>
+                <th>Title</th>
+                <th>Format</th>
+                <th class="col-action">&nbsp;</th>
+              </tr>
+            </thead>
+            <tbody>${contentRows}</tbody>
+          </table>
+        </div>
+      </div>
+    </td>
+  `;
+
+  return row;
 }
 
 function normalizeManga(item) {
@@ -702,12 +711,6 @@ function applyMangaFilters() {
     const haystack = [item.manga_id, item.title, item.publisher, item.series].join(" ").toLowerCase();
     return haystack.includes(search);
   });
-  if (state.activeManga?.manga_id) {
-    const stillVisible = state.filteredMangaItems.some((item) => item.manga_id === state.activeManga?.manga_id);
-    if (!stillVisible) {
-      closeContentPanel();
-    }
-  }
   renderMangaGrid();
 }
 
@@ -721,13 +724,11 @@ function renderMangaGrid() {
   }
 
   const fragment = document.createDocumentFragment();
-  const isGridLocked = Boolean(state.activeManga?.manga_id);
   state.filteredMangaItems.forEach((item) => {
     const mangaId = String(item.manga_id || "").trim();
-    const isActive = mangaId && mangaId === String(state.activeManga?.manga_id || "").trim();
+    const isActive = mangaId && state.expandedMangaIds.has(mangaId);
     const expandTitle = isActive ? "Collapse Content" : "Expand Content";
-    const canToggle = !isGridLocked || isActive;
-    const expandIcon = isActive ? "\u25BE" : "\u25B8";
+    const expandIcon = isActive ? "-" : "+";
     const row = document.createElement("tr");
     row.setAttribute("data-manga-id", mangaId);
     if (isActive) {
@@ -742,7 +743,6 @@ function renderMangaGrid() {
           title="${expandTitle}"
           aria-label="${expandTitle}"
           aria-expanded="${isActive ? "true" : "false"}"
-          ${canToggle ? "" : "disabled"}
         >${expandIcon}</button>
       </td>
       <td class="col-cover-cell">${renderCoverThumb(item.cover_url, item.title)}</td>
@@ -751,13 +751,13 @@ function renderMangaGrid() {
       <td>${escapeHtml(item.series || "-")}</td>
       <td>
         <div class="row-actions">
-          <button type="button" class="row-action-btn icon-action-btn" data-edit-manga="${escapeHtml(item.manga_id)}" title="Edit" aria-label="Edit" ${isGridLocked ? "disabled" : ""}>
+          <button type="button" class="row-action-btn icon-action-btn" data-edit-manga="${escapeHtml(item.manga_id)}" title="Edit" aria-label="Edit">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M4 20h4l10-10-4-4L4 16v4z"></path>
               <path d="M13 7l4 4"></path>
             </svg>
           </button>
-          <button type="button" class="row-action-btn icon-action-btn icon-delete-btn" data-delete-manga="${escapeHtml(item.manga_id)}" title="Delete" aria-label="Delete" ${isGridLocked ? "disabled" : ""}>
+          <button type="button" class="row-action-btn icon-action-btn icon-delete-btn" data-delete-manga="${escapeHtml(item.manga_id)}" title="Delete" aria-label="Delete">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1h4a1 1 0 1 1 0 2h-1l-.78 11.2A2 2 0 0 1 15.22 19H8.78a2 2 0 0 1-1.99-1.8L6 6H5a1 1 0 1 1 0-2h4zm2 0h2V3h-2v1zm-1 4a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0V9a1 1 0 0 0-1-1zm4 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0V9a1 1 0 0 0-1-1z"></path>
             </svg>
@@ -766,10 +766,12 @@ function renderMangaGrid() {
       </td>
     `;
     fragment.appendChild(row);
+    if (isActive) {
+      fragment.appendChild(renderInlineContentRow(mangaId));
+    }
   });
 
   elements.mangaTableBody.appendChild(fragment);
-  syncInlineContentPanelPlacement();
   bindCoverThumbFallbacks(elements.mangaTableBody);
 }
 
@@ -944,111 +946,36 @@ async function deleteManga(mangaId) {
 }
 
 async function openContentPanel(mangaId) {
-  const manga = state.mangaItems.find((item) => item.manga_id === mangaId);
+  const normalized = String(mangaId || "").trim();
+  if (!normalized) return;
+  const manga = setActiveMangaById(normalized);
   if (!manga) {
     showError("Manga not found.");
     return;
   }
 
-  state.activeManga = manga;
-  setParentGridLock(true);
-  clearInlineActiveRowStyles();
-  const selectedRow = elements.mangaTableBody.querySelector(`tr[data-manga-id="${CSS.escape(manga.manga_id)}"]`);
-  if (selectedRow instanceof HTMLTableRowElement) {
-    selectedRow.classList.add("is-content-active");
-    const selectedToggle = selectedRow.querySelector("[data-open-content]");
-    if (selectedToggle) {
-      selectedToggle.setAttribute("aria-expanded", "true");
-      selectedToggle.setAttribute("title", "Collapse Content");
-      selectedToggle.setAttribute("aria-label", "Collapse Content");
-      selectedToggle.textContent = "\u25BE";
-    }
-  }
-  clearContentPanelError();
-
+  state.expandedMangaIds.add(normalized);
+  state.loadingContentMangaIds.add(normalized);
+  renderMangaGrid();
   try {
-    const url = new URL(endpoint.contentGet);
-    url.searchParams.set("manga_id", manga.manga_id);
-    const body = await requestJson(url.toString(), {
-      method: "GET",
-      headers: { Authorization: `Bearer ${state.session.accessToken}` },
-    });
-    const data = responseData(body);
-    const items = Array.isArray(data?.items) ? data.items : [];
-    state.contentItems = items.map(normalizeContent).sort((a, b) => a.content_key.localeCompare(b.content_key));
-    renderContentGrid();
-    syncInlineContentPanelPlacement();
+    const items = await fetchContentForManga(normalized);
+    state.contentItemsByManga.set(normalized, items);
   } catch (error) {
-    showContentPanelError(error instanceof Error ? error.message : String(error));
+    state.expandedMangaIds.delete(normalized);
+    state.contentItemsByManga.delete(normalized);
+    showError(error instanceof Error ? error.message : String(error));
+  } finally {
+    state.loadingContentMangaIds.delete(normalized);
+    renderMangaGrid();
   }
 }
 
-function closeContentPanel() {
-  state.activeManga = null;
-  state.contentItems = [];
-  setParentGridLock(false);
-  clearInlineActiveRowStyles();
-  if (state.inlineContentRow?.isConnected) {
-    state.inlineContentRow.remove();
-  }
-  if (elements.contentPanel?.parentElement !== elements.contentPanelStaging) {
-    elements.contentPanelStaging?.appendChild(elements.contentPanel);
-  }
-}
-
-function renderContentGrid() {
-  elements.contentTableBody.innerHTML = "";
-  if (!state.contentItems.length) {
-    const row = document.createElement("tr");
-    row.innerHTML = '<td class="admin-grid-empty" colspan="6">No child content records.</td>';
-    elements.contentTableBody.appendChild(row);
-    return;
-  }
-
-  const fragment = document.createDocumentFragment();
-  state.contentItems.forEach((item) => {
-    const contentKey = escapeHtml(item.content_key);
-    const fileStatusLabel = getContentFileStatusLabel(item);
-    const canViewInReader = isPdfContentItem(item);
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td class="col-cover-cell">${renderCoverThumb(item.cover_url, item.title || item.content_key)}</td>
-      <td>${escapeHtml(item.content_type || "-")}</td>
-      <td>${escapeHtml(item.sequence_number || "-")}</td>
-      <td>${escapeHtml(item.title || "-")}</td>
-      <td>${escapeHtml(fileStatusLabel)}</td>
-      <td class="col-action-cell">
-        <div class="row-actions">
-          ${
-            canViewInReader
-              ? `
-          <button type="button" class="row-action-btn icon-action-btn" data-view-content="${contentKey}" title="View PDF" aria-label="View PDF">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M2 12s3.8-6 10-6 10 6 10 6-3.8 6-10 6-10-6-10-6z"></path>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
-          </button>
-          `
-              : ""
-          }
-          <button type="button" class="row-action-btn icon-action-btn" data-edit-content="${contentKey}" title="Edit" aria-label="Edit">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 20h4l10-10-4-4L4 16v4z"></path>
-              <path d="M13 7l4 4"></path>
-            </svg>
-          </button>
-          <button type="button" class="row-action-btn icon-action-btn icon-delete-btn" data-delete-content="${contentKey}" title="Delete" aria-label="Delete">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1h4a1 1 0 1 1 0 2h-1l-.78 11.2A2 2 0 0 1 15.22 19H8.78a2 2 0 0 1-1.99-1.8L6 6H5a1 1 0 1 1 0-2h4zm2 0h2V3h-2v1zm-1 4a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0V9a1 1 0 0 0-1-1zm4 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0V9a1 1 0 0 0-1-1z"></path>
-            </svg>
-          </button>
-        </div>
-      </td>
-    `;
-    fragment.appendChild(row);
-  });
-  elements.contentTableBody.appendChild(fragment);
-  bindCoverThumbFallbacks(elements.contentTableBody);
+function closeContentPanel(mangaId) {
+  const normalized = String(mangaId || "").trim();
+  if (!normalized) return;
+  state.expandedMangaIds.delete(normalized);
+  state.loadingContentMangaIds.delete(normalized);
+  renderMangaGrid();
 }
 
 function openContentModal(mode, item = null) {
@@ -1244,7 +1171,7 @@ async function saveContent(event) {
     }
     showSuccess(isCreate ? "Content created." : "Content updated.");
     closeContentModal();
-    await openContentPanel(payload.manga_id);
+    state.expandedMangaIds.add(payload.manga_id);
     await refreshMangaGrid();
   } catch (error) {
     if (metadataSaved && isCreate) {
@@ -1260,9 +1187,10 @@ async function saveContent(event) {
   }
 }
 
-async function deleteContent(contentKey) {
-  const mangaId = state.activeManga?.manga_id;
-  if (!mangaId) return;
+async function deleteContent(mangaId, contentKey) {
+  const normalizedMangaId = String(mangaId || "").trim();
+  if (!normalizedMangaId) return;
+  setActiveMangaById(normalizedMangaId);
   if (!window.confirm("Are you sure you want to delete this record?")) {
     return;
   }
@@ -1272,13 +1200,13 @@ async function deleteContent(contentKey) {
     await requestJson(endpoint.contentDelete, {
       method: "DELETE",
       headers: jsonHeaders(),
-      body: JSON.stringify({ manga_id: mangaId, content_key: contentKey }),
+      body: JSON.stringify({ manga_id: normalizedMangaId, content_key: contentKey }),
     });
     showSuccess("Content deleted.");
-    await openContentPanel(mangaId);
+    state.expandedMangaIds.add(normalizedMangaId);
     await refreshMangaGrid();
   } catch (error) {
-    showContentPanelError(error instanceof Error ? error.message : String(error));
+    showError(error instanceof Error ? error.message : String(error));
   } finally {
     setBusy(false);
   }
@@ -1289,14 +1217,27 @@ async function refreshMangaGrid() {
   setBusy(true);
   try {
     await fetchMangaList();
-    if (state.activeManga?.manga_id) {
-      const nextActive = state.mangaItems.find((item) => item.manga_id === state.activeManga?.manga_id) || null;
-      if (!nextActive) {
-        closeContentPanel();
-      } else {
-        state.activeManga = nextActive;
-      }
-    }
+    const validMangaIds = new Set(state.mangaItems.map((item) => item.manga_id));
+    const nextExpanded = new Set(
+      [...state.expandedMangaIds].filter((mangaId) => validMangaIds.has(mangaId))
+    );
+    state.expandedMangaIds = nextExpanded;
+    state.loadingContentMangaIds = new Set(nextExpanded);
+    state.contentItemsByManga = new Map(
+      [...state.contentItemsByManga.entries()].filter(([mangaId]) => nextExpanded.has(mangaId))
+    );
+    await Promise.all(
+      [...nextExpanded].map(async (mangaId) => {
+        try {
+          const items = await fetchContentForManga(mangaId);
+          state.contentItemsByManga.set(mangaId, items);
+        } catch {
+          state.contentItemsByManga.set(mangaId, []);
+        } finally {
+          state.loadingContentMangaIds.delete(mangaId);
+        }
+      })
+    );
     applyMangaFilters();
   } catch (error) {
     showError(error instanceof Error ? error.message : String(error));
@@ -1317,13 +1258,55 @@ function wireEvents() {
     const openBtn = target.closest("[data-open-content]");
     if (openBtn instanceof Element) {
       const mangaId = String(openBtn.getAttribute("data-open-content") || "").trim();
-      const isSameManga = mangaId && mangaId === String(state.activeManga?.manga_id || "").trim();
-      if (isSameManga && state.inlineContentRow?.isConnected) {
-        closeContentPanel();
-        renderMangaGrid();
+      if (mangaId && state.expandedMangaIds.has(mangaId)) {
+        closeContentPanel(mangaId);
         return;
       }
       void openContentPanel(mangaId);
+      return;
+    }
+
+    const addContentBtn = target.closest("[data-add-content-for]");
+    if (addContentBtn instanceof Element) {
+      const mangaId = String(addContentBtn.getAttribute("data-add-content-for") || "").trim();
+      if (setActiveMangaById(mangaId)) {
+        openContentModal("create");
+      }
+      return;
+    }
+
+    const viewContentBtn = target.closest("[data-view-content]");
+    if (viewContentBtn instanceof Element) {
+      const mangaId = String(viewContentBtn.getAttribute("data-content-manga-id") || "").trim();
+      const contentKey = String(viewContentBtn.getAttribute("data-view-content") || "").trim();
+      const items = state.contentItemsByManga.get(mangaId) || [];
+      const item = items.find((entry) => entry.content_key === contentKey);
+      if (item) {
+        setActiveMangaById(mangaId);
+        clearError();
+        openContentInReader(item);
+      }
+      return;
+    }
+
+    const editContentBtn = target.closest("[data-edit-content]");
+    if (editContentBtn instanceof Element) {
+      const mangaId = String(editContentBtn.getAttribute("data-content-manga-id") || "").trim();
+      const contentKey = String(editContentBtn.getAttribute("data-edit-content") || "").trim();
+      const items = state.contentItemsByManga.get(mangaId) || [];
+      const item = items.find((entry) => entry.content_key === contentKey);
+      if (item) {
+        setActiveMangaById(mangaId);
+        openContentModal("update", item);
+      }
+      return;
+    }
+
+    const deleteContentBtn = target.closest("[data-delete-content]");
+    if (deleteContentBtn instanceof Element) {
+      const mangaId = String(deleteContentBtn.getAttribute("data-content-manga-id") || "").trim();
+      const contentKey = String(deleteContentBtn.getAttribute("data-delete-content") || "").trim();
+      void deleteContent(mangaId, contentKey);
       return;
     }
 
@@ -1339,36 +1322,6 @@ function wireEvents() {
     if (deleteBtn instanceof Element) {
       const mangaId = String(deleteBtn.getAttribute("data-delete-manga") || "").trim();
       void deleteManga(mangaId);
-    }
-  });
-
-  elements.contentTableBody.addEventListener("click", (event) => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-
-    const viewBtn = target.closest("[data-view-content]");
-    if (viewBtn instanceof Element) {
-      const contentKey = String(viewBtn.getAttribute("data-view-content") || "").trim();
-      const item = state.contentItems.find((entry) => entry.content_key === contentKey);
-      if (item) {
-        clearContentPanelError();
-        openContentInReader(item);
-      }
-      return;
-    }
-
-    const editBtn = target.closest("[data-edit-content]");
-    if (editBtn instanceof Element) {
-      const contentKey = String(editBtn.getAttribute("data-edit-content") || "").trim();
-      const item = state.contentItems.find((entry) => entry.content_key === contentKey);
-      if (item) openContentModal("update", item);
-      return;
-    }
-
-    const deleteBtn = target.closest("[data-delete-content]");
-    if (deleteBtn instanceof Element) {
-      const contentKey = String(deleteBtn.getAttribute("data-delete-content") || "").trim();
-      void deleteContent(contentKey);
     }
   });
 
@@ -1508,7 +1461,6 @@ function wireEvents() {
 
   elements.closeMangaModalBtn.addEventListener("click", closeMangaModal);
   elements.cancelMangaBtn.addEventListener("click", closeMangaModal);
-  elements.addContentBtn.addEventListener("click", () => openContentModal("create"));
   elements.closeContentModalBtn.addEventListener("click", closeContentModal);
   elements.cancelContentBtn.addEventListener("click", closeContentModal);
 

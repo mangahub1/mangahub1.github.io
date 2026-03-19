@@ -357,7 +357,7 @@ body {
   color: inherit;
   padding: 0.8rem 0.85rem;
   display: grid;
-  grid-template-columns: 64px 1fr auto;
+  grid-template-columns: 64px 1fr;
   align-items: center;
   gap: 0.8rem;
 }
@@ -396,12 +396,6 @@ body {
   line-height: 1.35;
 }
 
-.volume-chevron {
-  color: #8e95a2;
-  font-size: 1.2rem;
-  line-height: 1;
-}
-
 @media (max-width: 980px) {
   .manga-layout {
     grid-template-columns: 1fr;
@@ -412,7 +406,7 @@ body {
   }
 
   .volume-item {
-    grid-template-columns: 56px 1fr auto;
+    grid-template-columns: 56px 1fr;
   }
 
   .volume-cover {

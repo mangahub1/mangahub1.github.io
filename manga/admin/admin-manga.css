@@ -208,9 +208,9 @@
 }
 
 .expand-toggle-btn {
-  width: 2.25rem;
-  min-width: 2.25rem;
-  height: 2.25rem;
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
   padding: 0;
   display: inline-grid;
   place-items: center;
@@ -218,10 +218,35 @@
   border: 1px solid #cfdaea;
   background: #fff;
   color: #2b3444;
-  font-size: 1.28rem;
-  font-weight: 700;
-  line-height: 1;
+  font-size: 0;
+  line-height: 0;
+  position: relative;
   cursor: pointer;
+}
+
+.expand-toggle-btn::before,
+.expand-toggle-btn::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: currentColor;
+  border-radius: 999px;
+}
+
+.expand-toggle-btn::before {
+  width: 0.82rem;
+  height: 2px;
+}
+
+.expand-toggle-btn::after {
+  width: 2px;
+  height: 0.82rem;
+}
+
+.expand-toggle-btn[aria-expanded="true"]::after {
+  display: none;
 }
 
 .row-action-btn:hover:not(:disabled),

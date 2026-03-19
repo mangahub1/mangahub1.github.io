@@ -1,13 +1,44 @@
 import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
+import { appAuthzConfig } from "./auth/auth-config.js";
 import { getAuthSession, getJwtGivenName, getJwtPicture } from "./auth/auth-session.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
 
-const CONTENT_DATA_PATH = "./content.json";
 const FALLBACK_COVER = "./content/manga/placeholder.svg";
 const SINGLE_PAGE_BREAKPOINT = 900;
 const MAX_ZOOM = 2;
+
+function endpointLooksConfigured(value) {
+  return String(value || "").trim().startsWith("https://");
+}
+
+function endpointFromMangaBase(pathname) {
+  const mangaEndpoint = String(appAuthzConfig?.getMangaEndpoint || "").trim();
+  if (!endpointLooksConfigured(mangaEndpoint)) {
+    return "";
+  }
+  try {
+    const url = new URL(mangaEndpoint);
+    url.pathname = pathname;
+    url.search = "";
+    return url.toString();
+  } catch (_error) {
+    return "";
+  }
+}
+
+const endpoint = {
+  featureCategoryGet:
+    String(appAuthzConfig?.getFeatureCategoryEndpoint || "").trim() ||
+    endpointFromMangaBase("/feature-category"),
+  featureCategoryItemGet:
+    String(appAuthzConfig?.getFeatureCategoryItemEndpoint || "").trim() ||
+    endpointFromMangaBase("/feature-category-item"),
+  mangaContentGet:
+    String(appAuthzConfig?.getMangaContentEndpoint || "").trim() ||
+    endpointFromMangaBase("/manga-content"),
+};
 
 const state = {
   pdfDoc: null,
@@ -25,6 +56,7 @@ const state = {
   selectedGenre: "",
   activeItem: null,
   eventsBound: false,
+  awaitingFirstRender: false,
 };
 
 const elements = {
@@ -35,6 +67,8 @@ const elements = {
   libraryLink: document.getElementById("libraryLink"),
   pager: document.querySelector("footer.pager"),
   stage: document.getElementById("canvasStage"),
+  readerLoading: document.getElementById("readerLoading"),
+  readerLoadingText: document.getElementById("readerLoadingText"),
   spread: document.getElementById("spreadContainer"),
   leftPanel: document.getElementById("leftPanel"),
   rightPanel: document.getElementById("rightPanel"),
@@ -116,53 +150,137 @@ function clearError() {
   elements.errorBanner.classList.add("hidden");
 }
 
-function sanitizeContentItem(item) {
-  if (!item || typeof item !== "object") {
-    return null;
+function responseData(payload) {
+  if (payload && typeof payload === "object" && "data" in payload) {
+    return payload.data;
+  }
+  return payload;
+}
+
+async function requestJson(url, options = {}) {
+  if (!endpointLooksConfigured(url)) {
+    throw new Error("API endpoint is not configured.");
+  }
+  const session = getAuthSession();
+  const token = String(session?.accessToken || "").trim();
+  const headers = {
+    ...(options.headers || {}),
+  };
+  if (token && !headers.Authorization) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  if (options.method && options.method.toUpperCase() !== "GET" && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
   }
 
-  const id = String(item.id || "").trim();
-  const title = String(item.title || "").trim();
-  const pdf = String(item.pdf || "").trim();
-  const cover = String(item.cover || item.thumbnail || "").trim();
-  const groups = Array.isArray(item.groups)
-    ? item.groups
-        .map((group) => String(group || "").trim())
-        .filter((group) => group.length > 0)
-    : [];
-  const genres = Array.isArray(item.genres)
-    ? item.genres
-        .map((genre) => String(genre || "").trim())
-        .filter((genre) => genre.length > 0)
-    : [];
-
-  if (!id || !title || !pdf) {
-    return null;
+  const response = await fetch(url, {
+    ...options,
+    headers,
+    cache: "no-store",
+  });
+  const raw = await response.text();
+  let parsed = {};
+  if (raw) {
+    try {
+      parsed = JSON.parse(raw);
+    } catch (_error) {
+      parsed = { raw };
+    }
   }
 
+  if (!response.ok) {
+    const errorMessage = String(parsed?.error || parsed?.message || raw || "").trim();
+    throw new Error(`HTTP ${response.status}${errorMessage ? `: ${errorMessage}` : ""}`);
+  }
+  if (parsed && typeof parsed === "object" && parsed.success === false) {
+    throw new Error(String(parsed.error || "API request failed."));
+  }
+  return parsed;
+}
+
+function normalizeCategory(category) {
+  const categoryId = String(category?.category_id || "").trim();
+  const name = String(category?.name || "").trim();
+  if (!categoryId || !name) {
+    return null;
+  }
+  const displayOrder = Number(category?.display_order);
   return {
-    id,
-    title,
-    pdf,
-    cover: cover || FALLBACK_COVER,
-    groups,
-    genres,
-    description: String(item.description || "").trim(),
+    id: categoryId,
+    title: name,
+    order: Number.isFinite(displayOrder) ? displayOrder : Number.MAX_SAFE_INTEGER,
   };
 }
 
-function sanitizeSection(section) {
-  if (!section || typeof section !== "object") {
+function titleCaseWords(value) {
+  return String(value || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function parseContentMetaFromKey(contentKey) {
+  const value = String(contentKey || "").trim();
+  if (!value) {
+    return { contentType: "", sequenceNumber: 0 };
+  }
+  const [rawType = "", rawSequence = ""] = value.split("#", 2);
+  const sequenceDigits = String(rawSequence).replace(/[^\d]/g, "");
+  return {
+    contentType: rawType,
+    sequenceNumber: sequenceDigits ? Number(sequenceDigits) : 0,
+  };
+}
+
+function formatContentTypeLabel(contentType) {
+  const normalized = String(contentType || "").trim().replace(/[_-]+/g, " ");
+  if (!normalized) {
+    return "";
+  }
+  return titleCaseWords(normalized);
+}
+
+function normalizeCategoryItem(item) {
+  const categoryId = String(item?.category_id || "").trim();
+  const mangaId = String(item?.manga_id || "").trim();
+  const itemType = String(item?.item_type || "").trim().toUpperCase();
+  const contentKey = String(item?.content_key || "").trim();
+  if (!categoryId || !mangaId || !itemType) {
     return null;
   }
 
-  const id = String(section.id || "").trim();
-  const title = String(section.title || "").trim();
-  if (!id || !title) {
-    return null;
-  }
+  const itemId = itemType === "MANGA_CONTENT" && contentKey
+    ? `${mangaId}::${contentKey}`
+    : mangaId;
+  const title = String(item?.title || mangaId).trim();
+  const cover = String(item?.cover_url || "").trim() || FALLBACK_COVER;
+  const tags = Array.isArray(item?.tags)
+    ? item.tags.map((tag) => String(tag || "").trim()).filter(Boolean)
+    : [];
+  const rawContentType = String(item?.content_type || "").trim();
+  const parsedContentMeta = parseContentMetaFromKey(contentKey);
+  const contentType = rawContentType || parsedContentMeta.contentType;
+  const parsedSequenceNumber = Number(item?.sequence_number);
+  const sequenceNumber = Number.isFinite(parsedSequenceNumber) && parsedSequenceNumber > 0
+    ? parsedSequenceNumber
+    : parsedContentMeta.sequenceNumber;
 
-  return { id, title };
+  return {
+    id: itemId,
+    mangaId,
+    contentKey,
+    itemType,
+    title,
+    cover,
+    pdf: "",
+    groups: [categoryId],
+    genres: tags,
+    description: "",
+    contentType,
+    sequenceNumber,
+  };
 }
 
 function buildQueryPreviewItem(params) {
@@ -177,6 +295,9 @@ function buildQueryPreviewItem(params) {
 
   return {
     id,
+    mangaId: id,
+    contentKey: String(params.get("content_key") || "").trim(),
+    itemType: "MANGA_CONTENT",
     title,
     pdf,
     cover: cover || FALLBACK_COVER,
@@ -188,37 +309,59 @@ function buildQueryPreviewItem(params) {
 
 async function loadContent() {
   try {
-    const response = await fetch(CONTENT_DATA_PATH, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    if (!endpointLooksConfigured(endpoint.featureCategoryGet)) {
+      throw new Error("FeatureCategory GET endpoint is not configured.");
+    }
+    if (!endpointLooksConfigured(endpoint.featureCategoryItemGet)) {
+      throw new Error("FeatureCategoryItem GET endpoint is not configured.");
     }
 
-    const data = await response.json();
-    const rawItems = Array.isArray(data?.manga) ? data.manga : [];
-    const rawSections = Array.isArray(data?.sections) ? data.sections : [];
-    const contentItems = rawItems.map(sanitizeContentItem).filter(Boolean);
-    const sectionOrder = rawSections.map(sanitizeSection).filter(Boolean);
+    const categoriesResponse = await requestJson(endpoint.featureCategoryGet, { method: "GET" });
+    const categoriesData = responseData(categoriesResponse);
+    const categories = Array.isArray(categoriesData?.items)
+      ? categoriesData.items.map(normalizeCategory).filter(Boolean)
+      : [];
 
-    if (!contentItems.length) {
-      throw new Error("No valid manga entries found.");
+    if (!categories.length) {
+      throw new Error("No active feature categories were returned.");
     }
 
-    const knownSectionIds = new Set(sectionOrder.map((section) => section.id));
-    const discoveredSections = [];
-    contentItems.forEach((item) => {
-      item.groups.forEach((groupId) => {
-        if (!knownSectionIds.has(groupId)) {
-          knownSectionIds.add(groupId);
-          discoveredSections.push({
-            id: groupId,
-            title: groupId.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-          });
+    categories.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+    const itemResponseList = await Promise.all(
+      categories.map(async (category) => {
+        const url = new URL(endpoint.featureCategoryItemGet);
+        url.searchParams.set("category_id", category.id);
+        const response = await requestJson(url.toString(), { method: "GET" });
+        const data = responseData(response);
+        const items = Array.isArray(data?.items)
+          ? data.items.map(normalizeCategoryItem).filter(Boolean)
+          : [];
+        return { categoryId: category.id, items };
+      })
+    );
+
+    const itemById = new Map();
+    itemResponseList.forEach(({ categoryId, items }) => {
+      items.forEach((item) => {
+        const existing = itemById.get(item.id);
+        if (!existing) {
+          itemById.set(item.id, item);
+          return;
         }
+        const mergedGroups = Array.from(new Set([...(existing.groups || []), categoryId]));
+        const mergedGenres = Array.from(new Set([...(existing.genres || []), ...(item.genres || [])]));
+        existing.groups = mergedGroups;
+        existing.genres = mergedGenres;
       });
     });
 
+    const contentItems = Array.from(itemById.values());
+    if (!contentItems.length) {
+      throw new Error("No active feature category items were returned.");
+    }
+
     state.contentItems = contentItems;
-    state.librarySections = [...sectionOrder, ...discoveredSections];
+    state.librarySections = categories.map((category) => ({ id: category.id, title: category.title }));
     state.availableGenres = Array.from(
       new Set(
         contentItems.flatMap((item) =>
@@ -231,9 +374,7 @@ async function loadContent() {
     state.contentItems = [];
     state.librarySections = [];
     state.availableGenres = [];
-    showLibraryError(
-      `Could not load library metadata from ${CONTENT_DATA_PATH}. ${error.message}`
-    );
+    showLibraryError(`Could not load library from API. ${error.message}`);
     console.error(error);
   }
 }
@@ -262,21 +403,51 @@ function createMangaCard(item) {
 
   const meta = document.createElement("span");
   meta.className = "manga-meta";
-  meta.textContent = item.genres.length ? item.genres.join(", ") : "Manga";
+  meta.textContent = buildLibraryItemMetaLabel(item);
 
   card.append(cover, title, meta);
   card.addEventListener("click", () => {
-    window.location.href = `./manga/manga.html?manga=${encodeURIComponent(item.id)}`;
+    const itemType = String(item.itemType || "").trim().toUpperCase();
+    if (itemType === "MANGA_CONTENT") {
+      void openMangaById(item.mangaId || item.id, true, null, item.contentKey || "");
+      return;
+    }
+    window.location.href = `./manga/manga.html?manga=${encodeURIComponent(item.mangaId || item.id)}`;
   });
 
   return card;
+}
+
+function buildLibraryItemMetaLabel(item) {
+  const itemType = String(item?.itemType || "").trim().toUpperCase();
+  if (itemType !== "MANGA_CONTENT") {
+    return "Series";
+  }
+
+  const fallbackMeta = parseContentMetaFromKey(item?.contentKey || "");
+  const contentType = formatContentTypeLabel(item?.contentType || fallbackMeta.contentType);
+  const sequenceFromItem = Number(item?.sequenceNumber);
+  const sequenceNumber = Number.isFinite(sequenceFromItem) && sequenceFromItem > 0
+    ? sequenceFromItem
+    : fallbackMeta.sequenceNumber;
+
+  if (contentType && sequenceNumber > 0) {
+    return `${contentType} ${sequenceNumber}`;
+  }
+  if (contentType) {
+    return contentType;
+  }
+  if (sequenceNumber > 0) {
+    return `#${sequenceNumber}`;
+  }
+  return "Series";
 }
 
 function renderLibrary() {
   elements.libraryGrid.innerHTML = "";
   if (!state.contentItems.length) {
     elements.libraryGrid.innerHTML =
-      '<p class="library-empty">No manga available. Add entries to content.json.</p>';
+      '<p class="library-empty">No manga available in feature categories.</p>';
     return;
   }
 
@@ -374,6 +545,7 @@ function showLibraryView(pushState = false) {
   document.body.classList.remove("reader-active");
   document.body.classList.add("library-active");
   document.title = "BluPetal Library";
+  setReaderLoading(false);
 
   if (pushState) {
     const nextUrl = new URL(window.location.href);
@@ -387,6 +559,21 @@ function showReaderView() {
   elements.readerView.classList.remove("hidden");
   document.body.classList.add("reader-active");
   document.body.classList.remove("library-active");
+  setReaderLoading(true, "Loading...");
+}
+
+function setReaderLoading(isLoading, message = "Loading...") {
+  if (!elements.readerView) {
+    return;
+  }
+  elements.readerView.classList.toggle("is-loading", Boolean(isLoading));
+  elements.stage.classList.toggle("is-loading", Boolean(isLoading));
+  if (elements.readerLoading) {
+    elements.readerLoading.setAttribute("aria-hidden", isLoading ? "false" : "true");
+  }
+  if (elements.readerLoadingText && message) {
+    elements.readerLoadingText.textContent = String(message);
+  }
 }
 
 function updateReaderBackLink() {
@@ -403,10 +590,13 @@ function updateReaderBackLink() {
   }
 
   const activeId = String(state.activeItem?.id || "").trim();
-  const isCatalogItem = Boolean(activeId) && state.contentItems.some((entry) => entry.id === activeId);
+  const activeMangaId = String(state.activeItem?.mangaId || activeId).trim();
+  const isCatalogItem =
+    Boolean(activeId) &&
+    state.contentItems.some((entry) => entry.id === activeId || entry.mangaId === activeMangaId);
   if (isCatalogItem) {
     elements.libraryLink.href = `./manga/manga.html?manga=${encodeURIComponent(
-      activeId
+      activeMangaId
     )}`;
     elements.libraryLink.setAttribute("aria-label", `Back to ${state.activeItem.title}`);
   } else {
@@ -740,6 +930,14 @@ function renderEndPage(panelId) {
   ctx.fillText("Continue reading in Volume 2", baseWidth / 2, baseHeight / 2 + 70);
 }
 
+function completeInitialRenderIfNeeded() {
+  if (!state.awaitingFirstRender) {
+    return;
+  }
+  state.awaitingFirstRender = false;
+  setReaderLoading(false);
+}
+
 async function renderSpread(index) {
   const spread = state.spreads[index];
   if (!spread) {
@@ -771,6 +969,7 @@ async function renderSpread(index) {
     elements.rightPanel.style.width = "0px";
     elements.rightPanel.style.minWidth = "0px";
     elements.rightPanel.style.maxWidth = "0px";
+    completeInitialRenderIfNeeded();
     return;
   }
 
@@ -781,6 +980,7 @@ async function renderSpread(index) {
     elements.rightPanel.style.width = "0px";
     elements.rightPanel.style.minWidth = "0px";
     elements.rightPanel.style.maxWidth = "0px";
+    completeInitialRenderIfNeeded();
     return;
   }
 
@@ -793,6 +993,8 @@ async function renderSpread(index) {
   if (!isSingle) {
     await renderPdfPageToPanel(rightPage, "right");
   }
+
+  completeInitialRenderIfNeeded();
 }
 
 function queueRender(index = state.currentSpread) {
@@ -806,6 +1008,7 @@ function queueRender(index = state.currentSpread) {
     try {
       await renderSpread(index);
     } catch (error) {
+      completeInitialRenderIfNeeded();
       setError(`Render failed: ${error.message}`);
       console.error(error);
     } finally {
@@ -940,6 +1143,7 @@ function wireEvents() {
   window.addEventListener("popstate", () => {
     const params = new URLSearchParams(window.location.search);
     const mangaId = params.get("manga");
+    const contentKey = String(params.get("content_key") || "").trim();
     const fallbackItem = buildQueryPreviewItem(params);
     if (!mangaId) {
       if (fallbackItem) {
@@ -949,7 +1153,7 @@ function wireEvents() {
       showLibraryView(false);
       return;
     }
-    void openMangaById(mangaId, false, fallbackItem);
+    void openMangaById(mangaId, false, fallbackItem, contentKey);
   });
 
   elements.genreFilters?.addEventListener("click", (event) => {
@@ -969,8 +1173,87 @@ function wireEvents() {
   state.eventsBound = true;
 }
 
-async function loadPdfForItem(item) {
-  state.activeItem = item;
+async function loadFirstPdfForManga(mangaId, preferredContentKey = "") {
+  const cleanMangaId = String(mangaId || "").trim();
+  const cleanPreferredContentKey = String(preferredContentKey || "").trim();
+  if (!cleanMangaId || !endpointLooksConfigured(endpoint.mangaContentGet)) {
+    return "";
+  }
+
+  const url = new URL(endpoint.mangaContentGet);
+  url.searchParams.set("manga_id", cleanMangaId);
+  const response = await requestJson(url.toString(), { method: "GET" });
+  const data = responseData(response);
+  const items = Array.isArray(data?.items) ? data.items : [];
+  if (!items.length) {
+    return "";
+  }
+
+  const withFile = items
+    .map((item) => ({
+      sequenceNumber: Number(item?.sequence_number),
+      contentKey: String(item?.content_key || "").trim(),
+      fileUrl: String(item?.file_url || "").trim(),
+    }))
+    .filter((entry) => entry.fileUrl);
+
+  if (!withFile.length) {
+    return "";
+  }
+
+  withFile.sort((a, b) => {
+    const aSeq = Number.isFinite(a.sequenceNumber) ? a.sequenceNumber : Number.MAX_SAFE_INTEGER;
+    const bSeq = Number.isFinite(b.sequenceNumber) ? b.sequenceNumber : Number.MAX_SAFE_INTEGER;
+    if (aSeq !== bSeq) {
+      return aSeq - bSeq;
+    }
+    return a.contentKey.localeCompare(b.contentKey);
+  });
+  if (cleanPreferredContentKey) {
+    const preferred = withFile.find((entry) => entry.contentKey === cleanPreferredContentKey);
+    if (preferred?.fileUrl) {
+      return preferred.fileUrl;
+    }
+  }
+  return withFile[0].fileUrl;
+}
+
+async function ensureItemHasPdf(item, preferredContentKey = "") {
+  if (!item || typeof item !== "object") {
+    return item;
+  }
+  const existingPdf = String(item.pdf || "").trim();
+  if (existingPdf) {
+    return item;
+  }
+  try {
+    const pdf = await loadFirstPdfForManga(
+      item.mangaId || item.id,
+      preferredContentKey || item.contentKey
+    );
+    if (!pdf) {
+      return item;
+    }
+    item.pdf = pdf;
+    return item;
+  } catch (error) {
+    console.error("Failed to fetch manga content for reader:", error);
+    return item;
+  }
+}
+
+async function loadPdfForItem(item, preferredContentKey = "") {
+  const nextItem = await ensureItemHasPdf(item, preferredContentKey);
+  const pdfUrl = String(nextItem?.pdf || "").trim();
+  if (!pdfUrl) {
+    state.awaitingFirstRender = false;
+    setReaderLoading(false);
+    setError("No readable manga file found for this title.");
+    showReaderView();
+    return;
+  }
+
+  state.activeItem = nextItem;
   state.zoom = 1;
   state.currentSpread = 0;
   state.pendingSpread = null;
@@ -979,11 +1262,13 @@ async function loadPdfForItem(item) {
 
   clearError();
   showReaderView();
+  setReaderLoading(true, "Loading...");
+  state.awaitingFirstRender = true;
   updateReaderBackLink();
-  document.title = `${item.title} - BluPetal`;
+  document.title = `${nextItem.title} - BluPetal`;
 
   try {
-    const loadingTask = pdfjsLib.getDocument(item.pdf);
+    const loadingTask = pdfjsLib.getDocument(pdfUrl);
     state.pdfDoc = await loadingTask.promise;
     state.totalPdfPages = state.pdfDoc.numPages;
     state.spreads = buildSpreads(state.totalPdfPages, state.singlePageMode);
@@ -994,34 +1279,55 @@ async function loadPdfForItem(item) {
     updatePager();
     queueRender();
   } catch (error) {
+    state.awaitingFirstRender = false;
+    setReaderLoading(false);
     state.spreads = [{ type: "error", pages: [] }];
     state.currentSpread = 0;
     updatePager();
     elements.leftPanel.classList.remove("hidden");
     elements.rightPanel.classList.add("hidden");
     showPanelFallback("left", "PDF could not be loaded.");
-    setError(
-      `Could not load ${item.pdf}. Verify the file exists and matches content.json.`
-    );
+    setError(`Could not load ${pdfUrl}. Verify the manga-content file URL is valid.`);
     console.error(error);
   }
 }
 
-async function openMangaById(mangaId, pushState = false, fallbackItem = null) {
-  let item = state.contentItems.find((entry) => entry.id === mangaId);
+async function openMangaById(
+  mangaId,
+  pushState = false,
+  fallbackItem = null,
+  preferredContentKey = ""
+) {
+  const cleanPreferredContentKey = String(preferredContentKey || "").trim();
+  let item = cleanPreferredContentKey
+    ? state.contentItems.find(
+        (entry) => entry.mangaId === mangaId && entry.contentKey === cleanPreferredContentKey
+      )
+    : null;
+  if (!item) {
+    item = state.contentItems.find((entry) => entry.id === mangaId);
+  }
+  if (!item) {
+    item = state.contentItems.find((entry) => entry.mangaId === mangaId);
+  }
   if (!item && fallbackItem && fallbackItem.id === mangaId) {
     item = fallbackItem;
   }
   if (!item) {
     showLibraryView(false);
-    showLibraryError(`Could not find manga id "${mangaId}" in content.json.`);
+    showLibraryError(`Could not find manga id "${mangaId}" in feature categories.`);
     return;
   }
 
   clearLibraryError();
   if (pushState) {
     const nextUrl = new URL(window.location.href);
-    nextUrl.searchParams.set("manga", item.id);
+    nextUrl.searchParams.set("manga", item.mangaId || item.id);
+    if (cleanPreferredContentKey) {
+      nextUrl.searchParams.set("content_key", cleanPreferredContentKey);
+    } else {
+      nextUrl.searchParams.delete("content_key");
+    }
     if (fallbackItem && fallbackItem.id === item.id) {
       nextUrl.searchParams.set("pdf", fallbackItem.pdf);
       nextUrl.searchParams.set("title", fallbackItem.title || "Preview");
@@ -1037,7 +1343,7 @@ async function openMangaById(mangaId, pushState = false, fallbackItem = null) {
     window.history.pushState({}, "", nextUrl);
   }
 
-  await loadPdfForItem(item);
+  await loadPdfForItem(item, cleanPreferredContentKey);
 }
 
 async function init() {
@@ -1046,21 +1352,30 @@ async function init() {
   wireEvents();
   await loadContent();
   renderGenreFilters();
-  renderLibrary();
 
   const params = new URLSearchParams(window.location.search);
   const mangaId = params.get("manga");
+  const contentKey = String(params.get("content_key") || "").trim();
   const fallbackItem = buildQueryPreviewItem(params);
+  const hasReaderTarget = Boolean(mangaId) || Boolean(fallbackItem);
+
+  if (hasReaderTarget) {
+    showReaderView();
+  } else {
+    showLibraryView(false);
+  }
+
+  renderLibrary();
+
   if (!mangaId && fallbackItem) {
     await loadPdfForItem(fallbackItem);
     return;
   }
   if (!mangaId) {
-    showLibraryView(false);
     return;
   }
 
-  await openMangaById(mangaId, false, fallbackItem);
+  await openMangaById(mangaId, false, fallbackItem, contentKey);
 }
 
 void init();

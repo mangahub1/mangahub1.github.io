@@ -9,15 +9,22 @@ export const cognitoAuthConfig = {
 
 export const appAuthzConfig = {
   validateUserEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/auth/validate",
-  getUsersEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-users",
-  updateUserEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/update-user",
-  getMangaEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-manga",
-  updateMangaEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/update-manga",
-  getMangaUploadUrlEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-manga-upload-url",
-  getMangaContentEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-manga-content",
-  updateMangaContentEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/update-manga-content",
+  getUsersEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/users",
+  updateUserEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/users",
+  getMangaEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/manga",
+  updateMangaEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/manga",
+  getMangaUploadUrlEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/manga/upload-url",
+  getMangaContentEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/manga-content",
+  updateMangaContentEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/manga-content",
+  getFeatureCategoryEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/feature-category",
+  updateFeatureCategoryEndpoint:
+    "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/feature-category",
+  getFeatureCategoryItemEndpoint:
+    "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/feature-category-item",
+  updateFeatureCategoryItemEndpoint:
+    "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/feature-category-item",
   getMangaContentUploadUrlEndpoint:
-    "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/get-manga-content-upload-url",
+    "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/manga-content/upload-url",
 };
 
 export const appUploadConfig = {
@@ -83,4 +90,23 @@ export function mangaContentApiConfigLooksReady() {
 export function mangaContentUploadApiConfigLooksReady() {
   const uploadEndpoint = String(appAuthzConfig.getMangaContentUploadUrlEndpoint || "").trim();
   return uploadEndpoint.startsWith("https://");
+}
+
+export function featureCategoryApiConfigLooksReady() {
+  const categoryEndpoint = String(appAuthzConfig.getFeatureCategoryEndpoint || "").trim();
+  const itemEndpoint = String(appAuthzConfig.getFeatureCategoryItemEndpoint || "").trim();
+  return categoryEndpoint.startsWith("https://") && itemEndpoint.startsWith("https://");
+}
+
+export function featureCategoryAdminApiConfigLooksReady() {
+  const categoryGet = String(appAuthzConfig.getFeatureCategoryEndpoint || "").trim();
+  const categoryUpdate = String(appAuthzConfig.updateFeatureCategoryEndpoint || "").trim();
+  const itemGet = String(appAuthzConfig.getFeatureCategoryItemEndpoint || "").trim();
+  const itemUpdate = String(appAuthzConfig.updateFeatureCategoryItemEndpoint || "").trim();
+  return (
+    categoryGet.startsWith("https://") &&
+    categoryUpdate.startsWith("https://") &&
+    itemGet.startsWith("https://") &&
+    itemUpdate.startsWith("https://")
+  );
 }

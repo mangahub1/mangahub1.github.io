@@ -1,3 +1,4 @@
+import { appAuthzConfig } from "../auth/auth-config.js";
 import {
   clearAuthSession,
   getAuthSession,
@@ -5,8 +6,33 @@ import {
   getJwtPicture,
 } from "../auth/auth-session.js";
 
-const CONTENT_DATA_PATH = "../content.json";
 const FALLBACK_COVER = "../content/manga/placeholder.svg";
+
+function endpointLooksConfigured(value) {
+  return String(value || "").trim().startsWith("https://");
+}
+
+function endpointFromMangaBase(pathname) {
+  const mangaEndpoint = String(appAuthzConfig?.getMangaEndpoint || "").trim();
+  if (!endpointLooksConfigured(mangaEndpoint)) {
+    return "";
+  }
+  try {
+    const url = new URL(mangaEndpoint);
+    url.pathname = pathname;
+    url.search = "";
+    return url.toString();
+  } catch (_error) {
+    return "";
+  }
+}
+
+const endpoint = {
+  mangaGet: String(appAuthzConfig?.getMangaEndpoint || "").trim() || endpointFromMangaBase("/manga"),
+  mangaContentGet:
+    String(appAuthzConfig?.getMangaContentEndpoint || "").trim() ||
+    endpointFromMangaBase("/manga-content"),
+};
 
 const elements = {
   mangaPage: document.getElementById("mangaPage"),
@@ -28,6 +54,53 @@ const elements = {
   adminPortalGroup: document.getElementById("adminPortalGroup"),
   signoutLink: document.querySelector(".settings-item.signout"),
 };
+
+function responseData(payload) {
+  if (payload && typeof payload === "object" && "data" in payload) {
+    return payload.data;
+  }
+  return payload;
+}
+
+async function requestJson(url, options = {}) {
+  if (!endpointLooksConfigured(url)) {
+    throw new Error("API endpoint is not configured.");
+  }
+  const session = getAuthSession();
+  const token = String(session?.accessToken || "").trim();
+  const headers = {
+    ...(options.headers || {}),
+  };
+  if (token && !headers.Authorization) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  if (options.method && options.method.toUpperCase() !== "GET" && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+    cache: "no-store",
+  });
+  const raw = await response.text();
+  let parsed = {};
+  if (raw) {
+    try {
+      parsed = JSON.parse(raw);
+    } catch (_error) {
+      parsed = { raw };
+    }
+  }
+  if (!response.ok) {
+    const errorMessage = String(parsed?.error || parsed?.message || raw || "").trim();
+    throw new Error(`HTTP ${response.status}${errorMessage ? `: ${errorMessage}` : ""}`);
+  }
+  if (parsed && typeof parsed === "object" && parsed.success === false) {
+    throw new Error(String(parsed.error || "API request failed."));
+  }
+  return parsed;
+}
 
 function wireAccountMenu() {
   const session = getAuthSession();
@@ -82,10 +155,14 @@ function hideError() {
   elements.mangaError.classList.add("hidden");
 }
 
-function normalizeParagraphs(item) {
-  if (Array.isArray(item.longDescription) && item.longDescription.length) {
-    return item.longDescription.map((part) => String(part || "").trim()).filter(Boolean);
+function normalizeKeywords(keywords) {
+  if (!Array.isArray(keywords)) {
+    return [];
   }
+  return keywords.map((value) => String(value || "").trim()).filter(Boolean);
+}
+
+function normalizeParagraphs(item) {
   const text = String(item.description || "").trim();
   if (!text) {
     return ["Description coming soon."];
@@ -93,58 +170,65 @@ function normalizeParagraphs(item) {
   return text.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
 }
 
-function normalizeVolumes(item) {
-  if (Array.isArray(item.volumes) && item.volumes.length) {
-    return item.volumes.map((volume, index) => ({
-      id: String(volume?.id || `v${index + 1}`),
-      title: String(volume?.title || `Volume ${index + 1}`),
-      date: String(volume?.date || ""),
-      pdf: String(volume?.pdf || item.pdf),
-      cover: String(volume?.cover || volume?.thumbnail || item.cover || item.thumbnail || ""),
-      synopsis: String(volume?.synopsis || "").trim(),
-    }));
+function formatVolumeTitle(contentItem, index) {
+  const explicitTitle = String(contentItem?.title || "").trim();
+  if (explicitTitle) {
+    return explicitTitle;
   }
-
-  const defaults = [
-    "October 1, 2025",
-    "November 5, 2025",
-    "December 3, 2025",
-    "January 7, 2026",
-    "February 4, 2026",
-    "March 4, 2026",
-  ];
-
-  return defaults.map((date, index) => ({
-    id: `v${index + 1}`,
-    title: `Volume ${index + 1}`,
-    date,
-    pdf: item.pdf,
-    cover: String(item.cover || item.thumbnail || ""),
-    synopsis: "",
-  }));
+  const contentType = String(contentItem?.content_type || "").trim().toLowerCase();
+  const sequenceNumber = Number(contentItem?.sequence_number);
+  if (Number.isFinite(sequenceNumber)) {
+    const prefix = contentType === "chapter" ? "Chapter" : "Volume";
+    return `${prefix} ${sequenceNumber}`;
+  }
+  return `Volume ${index + 1}`;
 }
 
-function resolveContentAssetPath(path) {
-  const value = String(path || "").trim();
-  if (!value) {
-    return "";
-  }
-  if (/^(?:https?:|data:|blob:)/i.test(value)) {
-    return value;
-  }
-  try {
-    const contentBaseUrl = new URL(CONTENT_DATA_PATH, window.location.href);
-    return new URL(value, contentBaseUrl).toString();
-  } catch (_error) {
-    return value;
-  }
+function normalizeVolumes(parent, contentItems) {
+  const normalized = (Array.isArray(contentItems) ? contentItems : [])
+    .map((contentItem, index) => ({
+      id: String(contentItem?.content_key || `v${index + 1}`),
+      contentKey: String(contentItem?.content_key || "").trim(),
+      sequenceNumber: Number(contentItem?.sequence_number),
+      title: formatVolumeTitle(contentItem, index),
+      date: "",
+      pdf: String(contentItem?.file_url || "").trim(),
+      cover: String(contentItem?.cover_url || "").trim() || String(parent.cover || "").trim(),
+      synopsis: String(contentItem?.synopsis || "").trim(),
+      contentType: String(contentItem?.content_type || "").trim(),
+    }))
+    .filter((item) => item.contentKey);
+
+  normalized.sort((a, b) => {
+    const aSeq = Number.isFinite(a.sequenceNumber) ? a.sequenceNumber : Number.MAX_SAFE_INTEGER;
+    const bSeq = Number.isFinite(b.sequenceNumber) ? b.sequenceNumber : Number.MAX_SAFE_INTEGER;
+    if (aSeq !== bSeq) {
+      return aSeq - bSeq;
+    }
+    return a.contentKey.localeCompare(b.contentKey);
+  });
+
+  return normalized;
+}
+
+function normalizeParentManga(item) {
+  return {
+    id: String(item?.manga_id || "").trim(),
+    title: String(item?.title || "").trim(),
+    cover: String(item?.cover_url || "").trim(),
+    description: String(item?.synopsis || "").trim(),
+    ageRating: String(item?.age_rating || "").trim(),
+    status: String(item?.is_active === false ? "Inactive" : "Ongoing").trim(),
+    genres: normalizeKeywords(item?.keywords),
+    author: String(item?.publisher || "").trim(),
+  };
 }
 
 function buildReaderUrl(item, volume) {
   const url = new URL("../library.html", window.location.href);
   url.searchParams.set("manga", item.id);
-  if (volume?.id) {
-    url.searchParams.set("volume", volume.id);
+  if (volume?.contentKey) {
+    url.searchParams.set("content_key", volume.contentKey);
   }
   return url.toString();
 }
@@ -152,12 +236,12 @@ function buildReaderUrl(item, volume) {
 function render(item) {
   const genres = Array.isArray(item.genres) ? item.genres : [];
   const paragraphs = normalizeParagraphs(item);
-  const volumes = normalizeVolumes(item);
+  const volumes = Array.isArray(item.volumes) ? item.volumes : [];
 
   elements.mangaTitle.textContent = item.title || "Untitled Manga";
   document.title = `${item.title || "Manga"} - BluPetal`;
 
-  elements.mangaCover.src = resolveContentAssetPath(item.cover || item.thumbnail) || FALLBACK_COVER;
+  elements.mangaCover.src = String(item.cover || "").trim() || FALLBACK_COVER;
   elements.mangaCover.alt = `${item.title || "Manga"} cover`;
   elements.mangaCover.addEventListener("error", () => {
     elements.mangaCover.src = FALLBACK_COVER;
@@ -173,12 +257,7 @@ function render(item) {
   elements.metaAuthor.textContent = item.author || "Unknown";
   elements.metaAge.textContent = item.ageRating || "18+";
   elements.metaStatus.textContent = item.status || "Ongoing";
-  elements.metaRating.textContent =
-    item.rating && item.ratingCount
-      ? `${item.rating} (${item.ratingCount} reviews)`
-      : item.rating
-      ? String(item.rating)
-      : "4.8";
+  elements.metaRating.textContent = "N/A";
 
   elements.metaGenres.innerHTML = "";
   (genres.length ? genres : ["Manga"]).forEach((genre) => {
@@ -189,69 +268,103 @@ function render(item) {
   });
 
   elements.volumeList.innerHTML = "";
-  volumes.forEach((volume) => {
-    const itemLink = document.createElement("a");
-    itemLink.className = "volume-item";
-    itemLink.href = buildReaderUrl(item, volume);
-    itemLink.setAttribute("aria-label", `Open ${volume.title}`);
+  if (!volumes.length) {
+    const empty = document.createElement("div");
+    empty.className = "volume-item";
+    empty.textContent = "No volumes available yet.";
+    elements.volumeList.appendChild(empty);
+  } else {
+    volumes.forEach((volume) => {
+      const itemLink = document.createElement("a");
+      itemLink.className = "volume-item";
+      itemLink.href = buildReaderUrl(item, volume);
+      itemLink.setAttribute("aria-label", `Open ${volume.title}`);
 
-    const volumeCover = document.createElement("img");
-    volumeCover.className = "volume-cover";
-    volumeCover.loading = "lazy";
-    volumeCover.decoding = "async";
-    volumeCover.src = resolveContentAssetPath(volume.cover) || FALLBACK_COVER;
-    volumeCover.alt = `${volume.title} cover`;
-    volumeCover.addEventListener("error", () => {
-      volumeCover.src = FALLBACK_COVER;
+      const volumeCover = document.createElement("img");
+      volumeCover.className = "volume-cover";
+      volumeCover.loading = "lazy";
+      volumeCover.decoding = "async";
+      volumeCover.src = String(volume.cover || "").trim() || FALLBACK_COVER;
+      volumeCover.alt = `${volume.title} cover`;
+      volumeCover.addEventListener("error", () => {
+        volumeCover.src = FALLBACK_COVER;
+      });
+
+      const textWrap = document.createElement("div");
+      textWrap.className = "volume-text";
+      const title = document.createElement("div");
+      title.className = "volume-label";
+      title.textContent = volume.title;
+      const date = document.createElement("div");
+      date.className = "volume-date";
+      date.textContent = volume.date || "Available";
+      const synopsis = document.createElement("p");
+      synopsis.className = "volume-synopsis";
+      synopsis.textContent = volume.synopsis || "Synopsis coming soon.";
+      textWrap.append(title, date, synopsis);
+
+      itemLink.append(volumeCover, textWrap);
+      elements.volumeList.appendChild(itemLink);
     });
+  }
 
-    const textWrap = document.createElement("div");
-    textWrap.className = "volume-text";
-    const title = document.createElement("div");
-    title.className = "volume-label";
-    title.textContent = volume.title;
-    const date = document.createElement("div");
-    date.className = "volume-date";
-    date.textContent = volume.date || "Coming soon";
-    const synopsis = document.createElement("p");
-    synopsis.className = "volume-synopsis";
-    synopsis.textContent = volume.synopsis || "Synopsis coming soon.";
-    textWrap.append(title, date, synopsis);
+  if (volumes[0]) {
+    elements.startReadingBtn.href = buildReaderUrl(item, volumes[0]);
+    elements.startReadingBtn.setAttribute("aria-disabled", "false");
+  } else {
+    elements.startReadingBtn.href = "#";
+    elements.startReadingBtn.setAttribute("aria-disabled", "true");
+  }
 
-    const chev = document.createElement("span");
-    chev.className = "volume-chevron";
-    chev.textContent = "⌄";
-
-    itemLink.append(volumeCover, textWrap, chev);
-    elements.volumeList.appendChild(itemLink);
-  });
-
-  elements.startReadingBtn.href = buildReaderUrl(item, volumes[0] || null);
   elements.mangaLayout.classList.remove("hidden");
+}
+
+async function loadMangaPageModel(mangaId) {
+  const mangaUrl = new URL(endpoint.mangaGet);
+  mangaUrl.searchParams.set("manga_id", mangaId);
+  const mangaResponse = await requestJson(mangaUrl.toString(), { method: "GET" });
+  const parent = normalizeParentManga(responseData(mangaResponse));
+  if (!parent.id) {
+    throw new Error(`Could not find manga id "${mangaId}".`);
+  }
+
+  const contentUrl = new URL(endpoint.mangaContentGet);
+  contentUrl.searchParams.set("manga_id", mangaId);
+  const contentResponse = await requestJson(contentUrl.toString(), { method: "GET" });
+  const contentData = responseData(contentResponse);
+  const childItems = Array.isArray(contentData?.items) ? contentData.items : [];
+  const volumes = normalizeVolumes(parent, childItems);
+
+  const firstChildAuthor = volumes.length
+    ? String(childItems[0]?.author || "").trim()
+    : "";
+
+  return {
+    ...parent,
+    author: parent.author || firstChildAuthor || "Unknown",
+    volumes,
+  };
 }
 
 async function init() {
   wireAccountMenu();
-  const mangaId = new URLSearchParams(window.location.search).get("manga");
+  const mangaId = String(new URLSearchParams(window.location.search).get("manga") || "").trim();
   if (!mangaId) {
     showError('Missing "manga" query parameter. Open from the library page.');
     return;
   }
 
   try {
-    const response = await fetch(CONTENT_DATA_PATH, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    if (!endpointLooksConfigured(endpoint.mangaGet)) {
+      throw new Error("Manga endpoint is not configured.");
     }
-    const data = await response.json();
-    const items = Array.isArray(data?.manga) ? data.manga : [];
-    const item = items.find((entry) => String(entry?.id) === mangaId);
-    if (!item) {
-      throw new Error(`Could not find manga id "${mangaId}" in content.json.`);
+    if (!endpointLooksConfigured(endpoint.mangaContentGet)) {
+      throw new Error("Manga content endpoint is not configured.");
     }
 
+    const model = await loadMangaPageModel(mangaId);
     hideError();
-    render(item);
+    render(model);
   } catch (error) {
     showError(`Could not load manga details. ${error.message}`);
     console.error(error);
@@ -259,6 +372,3 @@ async function init() {
 }
 
 void init();
-
-
-
