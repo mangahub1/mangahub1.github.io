@@ -93,6 +93,13 @@ body {
   position: relative;
 }
 
+.view-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+}
+
 .library-icon-btn {
   border: 0;
   background: transparent;
@@ -256,75 +263,119 @@ body {
   margin: 0 auto;
 }
 
-.library-search-panel {
-  background: #ffffff;
-  border: 1px solid #e4e8ef;
-  border-radius: 14px;
-  padding: 0.9rem 0.95rem;
-  margin-bottom: 1rem;
-  box-shadow: 0 8px 18px rgba(22, 31, 47, 0.06);
-}
-
-.library-search-row {
+.library-search-view {
   display: grid;
-  gap: 0.35rem;
+  gap: 1.25rem;
 }
 
-.library-search-label {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: #59657a;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+.library-search-toolbar {
+  display: grid;
+  gap: 1rem;
+  margin-top: 0.2rem;
 }
 
-.library-search-input {
-  height: 2.55rem;
-  border: 1px solid #d6ddea;
-  border-radius: 10px;
+.library-search-box {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: min(700px, 100%);
+  border: 1px solid #cfd6e2;
+  border-radius: 15px;
   padding: 0 0.8rem;
-  font-size: 0.95rem;
-  color: #1b2230;
-  background: #fbfcfe;
-}
-
-.library-search-input:focus-visible {
-  outline: 2px solid #f7b7da;
-  border-color: #e62591;
+  min-height: 3.2rem;
   background: #ffffff;
 }
 
-.library-genre-filters {
+.library-search-icon {
+  width: 20px;
+  height: 20px;
+  stroke: #8a94a7;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: 0 0 auto;
+}
+
+.library-search-text-input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  height: 3.1rem;
+  font-size: 1.55rem;
+  line-height: 1;
+  color: #1e232f;
+}
+
+.library-search-text-input::placeholder {
+  color: #a2abbb;
+}
+
+.library-search-filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-top: 0.72rem;
+  gap: 0.9rem 1rem;
 }
 
-.genre-filter-btn {
-  border: 1px solid #d5ddea;
-  border-radius: 999px;
-  background: #fff;
-  color: #384558;
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0.33rem 0.68rem;
+.library-filter-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #6f7889;
+  font-size: 1rem;
+  font-weight: 500;
 }
 
-.genre-filter-btn:hover:not(:disabled) {
-  background: #f6f8fc;
+.library-filter-field select {
+  appearance: none;
+  border: 1px solid #cad1dd;
+  border-radius: 11px;
+  background: #f7f8fb;
+  color: #1f2633;
+  min-width: 180px;
+  min-height: 2.35rem;
+  font-size: 1.03rem;
+  padding: 0 2.05rem 0 0.78rem;
+  background-image: linear-gradient(45deg, transparent 50%, #8e96a6 50%),
+    linear-gradient(135deg, #8e96a6 50%, transparent 50%);
+  background-position: calc(100% - 16px) 15px, calc(100% - 10px) 15px;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
 }
 
-.genre-filter-btn.active {
-  background: #e62591;
-  color: #fff;
-  border-color: #e62591;
+.library-filter-field select:focus-visible {
+  outline: 2px solid #c9d4eb;
+  border-color: #a7b6d4;
+  background-color: #ffffff;
 }
 
-.library-search-panel .genre-filter-btn.active:hover:not(:disabled) {
-  background: #f7b7da;
-  color: #111;
-  border-color: #e62591;
+.library-search-results-head {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.library-search-title {
+  margin: 0;
+  font-size: clamp(2rem, 4.4vw, 3.25rem);
+  font-weight: 500;
+  color: #11161f;
+}
+
+.library-search-count {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #788193;
+}
+
+.library-results-grid {
+  display: grid;
+  gap: 1.15rem 0.85rem;
+  grid-template-columns: repeat(auto-fill, minmax(146px, 1fr));
+}
+
+.library-results-grid .manga-card {
+  width: 100%;
+  min-width: 0;
 }
 
 .library-grid {
@@ -867,6 +918,31 @@ canvas {
 
   .library-section-title {
     font-size: 1.45rem;
+  }
+
+  .library-search-box {
+    width: 100%;
+    min-height: 2.75rem;
+  }
+
+  .library-search-text-input {
+    height: 2.7rem;
+    font-size: 1.1rem;
+  }
+
+  .library-filter-field {
+    width: 100%;
+    justify-content: space-between;
+    font-size: 0.95rem;
+  }
+
+  .library-filter-field select {
+    min-width: 56%;
+    font-size: 0.95rem;
+  }
+
+  .library-search-count {
+    font-size: 1rem;
   }
 
   .library-row {

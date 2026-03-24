@@ -1,4 +1,4 @@
-import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
+﻿import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
 import { appAuthzConfig } from "./auth/auth-config.js";
 import { getAuthSession, getJwtGivenName, getJwtPicture } from "./auth/auth-session.js";
 
@@ -53,7 +53,13 @@ const state = {
   contentItems: [],
   librarySections: [],
   availableGenres: [],
-  selectedGenre: "",
+  availableStatuses: [],
+  libraryViewMode: "home",
+  searchQuery: "",
+  searchGenre: "",
+  searchCategory: "",
+  searchStatus: "",
+  searchSort: "relevance",
   activeItem: null,
   eventsBound: false,
   awaitingFirstRender: false,
@@ -90,7 +96,16 @@ const elements = {
   accountAvatar: document.getElementById("accountAvatar"),
   welcomeMessage: document.getElementById("welcomeMessage"),
   accountIconSvg: document.querySelector(".settings-trigger .library-icon-svg"),
-  genreFilters: document.getElementById("libraryGenreFilters"),
+  openSearchView: document.getElementById("openSearchView"),
+  openHomeView: document.getElementById("openHomeView"),
+  librarySearchView: document.getElementById("librarySearchView"),
+  librarySearchInput: document.getElementById("librarySearchInput"),
+  librarySortSelect: document.getElementById("librarySortSelect"),
+  libraryGenreSelect: document.getElementById("libraryGenreSelect"),
+  libraryCategorySelect: document.getElementById("libraryCategorySelect"),
+  libraryStatusSelect: document.getElementById("libraryStatusSelect"),
+  librarySearchCount: document.getElementById("librarySearchCount"),
+  librarySearchResults: document.getElementById("librarySearchResults"),
 };
 
 function wireAdminMenu() {
@@ -278,9 +293,39 @@ function normalizeCategoryItem(item) {
     groups: [categoryId],
     genres: tags,
     description: "",
+    status: String(item?.status || "").trim(),
     contentType,
     sequenceNumber,
   };
+}
+
+function inferItemStatus(item) {
+  const explicit = String(item?.status || "").trim();
+  if (explicit) {
+    return explicit;
+  }
+
+  const haystack = [
+    item?.description,
+    ...(Array.isArray(item?.genres) ? item.genres : []),
+  ]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean)
+    .join(" ");
+
+  if (!haystack) {
+    return "Unknown";
+  }
+  if (haystack.includes("complete") || haystack.includes("completed")) {
+    return "Completed";
+  }
+  if (haystack.includes("ongoing")) {
+    return "Ongoing";
+  }
+  if (haystack.includes("hiatus")) {
+    return "Hiatus";
+  }
+  return "Unknown";
 }
 
 function buildQueryPreviewItem(params) {
@@ -369,11 +414,15 @@ async function loadContent() {
         )
       )
     ).sort((a, b) => a.localeCompare(b));
+    state.availableStatuses = Array.from(
+      new Set(contentItems.map((item) => inferItemStatus(item)))
+    ).sort((a, b) => a.localeCompare(b));
     clearLibraryError();
   } catch (error) {
     state.contentItems = [];
     state.librarySections = [];
     state.availableGenres = [];
+    state.availableStatuses = [];
     showLibraryError(`Could not load library from API. ${error.message}`);
     console.error(error);
   }
@@ -443,7 +492,7 @@ function buildLibraryItemMetaLabel(item) {
   return "Series";
 }
 
-function renderLibrary() {
+function renderGroupedLibrary() {
   elements.libraryGrid.innerHTML = "";
   if (!state.contentItems.length) {
     elements.libraryGrid.innerHTML =
@@ -451,31 +500,15 @@ function renderLibrary() {
     return;
   }
 
-  const hasActiveFilters = Boolean(state.selectedGenre);
-  const filteredItems = state.contentItems.filter((item) => {
-    const matchesGenre = !state.selectedGenre || item.genres.includes(state.selectedGenre);
-    return matchesGenre;
-  });
-
-  if (!filteredItems.length) {
-    elements.libraryGrid.innerHTML = '<p class="library-empty">No matches found. Try a different genre.</p>';
-    return;
-  }
-
   const fragment = document.createDocumentFragment();
-
-  const sectionsToRender = hasActiveFilters
-    ? [{ id: "__filtered__", title: "Filtered Results" }]
-    : state.librarySections.length
+  const sectionsToRender = state.librarySections.length
     ? state.librarySections
     : [{ id: "all", title: "All Manga" }];
 
   sectionsToRender.forEach((section) => {
-    const sourceItems = hasActiveFilters ? filteredItems : state.contentItems;
-    const itemsForSection =
-      section.id === "__filtered__" || section.id === "all"
-        ? sourceItems
-        : sourceItems.filter((item) => item.groups.includes(section.id));
+    const itemsForSection = section.id === "all"
+      ? state.contentItems
+      : state.contentItems.filter((item) => item.groups.includes(section.id));
 
     if (!itemsForSection.length) {
       return;
@@ -494,7 +527,15 @@ function renderLibrary() {
     const sectionAction = document.createElement("button");
     sectionAction.type = "button";
     sectionAction.className = "library-section-action";
-    sectionAction.textContent = "See All →";
+    sectionAction.textContent = "See All >";
+    sectionAction.addEventListener("click", () => {
+      state.searchCategory = section.id === "all" ? "" : section.title;
+      state.searchQuery = "";
+      state.searchGenre = "";
+      state.searchStatus = "";
+      state.searchSort = "relevance";
+      setLibraryViewMode("search");
+    });
 
     const row = document.createElement("div");
     row.className = "library-row";
@@ -511,32 +552,201 @@ function renderLibrary() {
   elements.libraryGrid.appendChild(fragment);
 }
 
-function renderGenreFilters() {
-  if (!elements.genreFilters) {
+function toNormalizedLower(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function scoreItemRelevance(item, normalizedQuery, categoryTitle) {
+  if (!normalizedQuery) {
+    return 0;
+  }
+  let score = 0;
+  const title = toNormalizedLower(item.title);
+  const genres = (Array.isArray(item.genres) ? item.genres : []).map(toNormalizedLower);
+  const category = toNormalizedLower(categoryTitle);
+
+  if (title === normalizedQuery) {
+    score += 120;
+  } else if (title.startsWith(normalizedQuery)) {
+    score += 95;
+  } else if (title.includes(normalizedQuery)) {
+    score += 70;
+  }
+
+  if (genres.some((genre) => genre === normalizedQuery)) {
+    score += 45;
+  } else if (genres.some((genre) => genre.includes(normalizedQuery))) {
+    score += 30;
+  }
+
+  if (category === normalizedQuery) {
+    score += 24;
+  } else if (category.includes(normalizedQuery)) {
+    score += 14;
+  }
+
+  return score;
+}
+
+function itemPrimaryCategory(item) {
+  const categoryId = Array.isArray(item.groups) && item.groups.length ? item.groups[0] : "";
+  if (!categoryId) {
+    return "";
+  }
+  const category = state.librarySections.find((section) => section.id === categoryId);
+  return category?.title || "";
+}
+
+function buildSearchFilteredItems() {
+  const normalizedQuery = toNormalizedLower(state.searchQuery);
+
+  return state.contentItems
+    .map((item) => {
+      const primaryCategory = itemPrimaryCategory(item);
+      const status = inferItemStatus(item);
+      const relevance = scoreItemRelevance(item, normalizedQuery, primaryCategory);
+      return { item, primaryCategory, status, relevance };
+    })
+    .filter(({ item, primaryCategory, status, relevance }) => {
+      const matchesQuery = !normalizedQuery || relevance > 0;
+      const matchesGenre = !state.searchGenre || item.genres.includes(state.searchGenre);
+      const matchesCategory = !state.searchCategory || primaryCategory === state.searchCategory;
+      const matchesStatus = !state.searchStatus || status === state.searchStatus;
+      return matchesQuery && matchesGenre && matchesCategory && matchesStatus;
+    })
+    .sort((left, right) => {
+      if (state.searchSort === "title_asc") {
+        return left.item.title.localeCompare(right.item.title);
+      }
+      if (state.searchSort === "title_desc") {
+        return right.item.title.localeCompare(left.item.title);
+      }
+      if (state.searchSort === "sequence_desc") {
+        const leftSeq = Number(left.item.sequenceNumber) || 0;
+        const rightSeq = Number(right.item.sequenceNumber) || 0;
+        if (leftSeq !== rightSeq) {
+          return rightSeq - leftSeq;
+        }
+        return left.item.title.localeCompare(right.item.title);
+      }
+      if (state.searchSort === "sequence_asc") {
+        const leftSeq = Number(left.item.sequenceNumber) || Number.MAX_SAFE_INTEGER;
+        const rightSeq = Number(right.item.sequenceNumber) || Number.MAX_SAFE_INTEGER;
+        if (leftSeq !== rightSeq) {
+          return leftSeq - rightSeq;
+        }
+        return left.item.title.localeCompare(right.item.title);
+      }
+      if (right.relevance !== left.relevance) {
+        return right.relevance - left.relevance;
+      }
+      return left.item.title.localeCompare(right.item.title);
+    });
+}
+
+function populateSelectOptions(selectElement, options, activeValue = "") {
+  if (!(selectElement instanceof HTMLSelectElement)) {
+    return;
+  }
+  selectElement.innerHTML = "";
+  options.forEach((option) => {
+    const nextOption = document.createElement("option");
+    nextOption.value = option.value;
+    nextOption.textContent = option.label;
+    if (option.value === activeValue) {
+      nextOption.selected = true;
+    }
+    selectElement.appendChild(nextOption);
+  });
+}
+
+function renderSearchControls() {
+  const sortOptions = [
+    { value: "relevance", label: "Relevance" },
+    { value: "title_asc", label: "Title A-Z" },
+    { value: "title_desc", label: "Title Z-A" },
+    { value: "sequence_desc", label: "Newest Content" },
+    { value: "sequence_asc", label: "Oldest Content" },
+  ];
+  populateSelectOptions(elements.librarySortSelect, sortOptions, state.searchSort);
+
+  const genreOptions = [{ value: "", label: "All Genres" }].concat(
+    state.availableGenres.map((genre) => ({ value: genre, label: genre }))
+  );
+  populateSelectOptions(elements.libraryGenreSelect, genreOptions, state.searchGenre);
+
+  const categoryOptions = [{ value: "", label: "All Categories" }].concat(
+    state.librarySections.map((section) => ({ value: section.title, label: section.title }))
+  );
+  populateSelectOptions(elements.libraryCategorySelect, categoryOptions, state.searchCategory);
+
+  const statusOptions = [{ value: "", label: "All" }].concat(
+    state.availableStatuses.map((status) => ({ value: status, label: status }))
+  );
+  populateSelectOptions(elements.libraryStatusSelect, statusOptions, state.searchStatus);
+
+  if (elements.librarySearchInput) {
+    elements.librarySearchInput.value = state.searchQuery;
+  }
+}
+
+function renderSearchLibrary() {
+  if (!elements.librarySearchResults) {
+    return;
+  }
+  elements.librarySearchResults.innerHTML = "";
+
+  if (!state.contentItems.length) {
+    elements.librarySearchResults.innerHTML = '<p class="library-empty">No manga available in feature categories.</p>';
+    if (elements.librarySearchCount) {
+      elements.librarySearchCount.textContent = "0 results";
+    }
     return;
   }
 
-  elements.genreFilters.innerHTML = "";
+  const matches = buildSearchFilteredItems();
+  const searchTermLabel = String(state.searchQuery || "").trim();
+  const countText = `${matches.length} result${matches.length === 1 ? "" : "s"}${searchTermLabel ? ` for "${searchTermLabel}"` : ""}`;
+  if (elements.librarySearchCount) {
+    elements.librarySearchCount.textContent = countText;
+  }
+
+  if (!matches.length) {
+    elements.librarySearchResults.innerHTML = '<p class="library-empty">No matches found. Try different filters.</p>';
+    return;
+  }
+
   const fragment = document.createDocumentFragment();
-  const allGenres = ["All", ...state.availableGenres];
-
-  allGenres.forEach((genre) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "genre-filter-btn";
-    const isAll = genre === "All";
-    const isActive = isAll
-      ? !state.selectedGenre
-      : state.selectedGenre.toLowerCase() === genre.toLowerCase();
-    if (isActive) {
-      button.classList.add("active");
-    }
-    button.setAttribute("data-genre-filter", isAll ? "" : genre);
-    button.textContent = genre;
-    fragment.appendChild(button);
+  matches.forEach(({ item }) => {
+    fragment.appendChild(createMangaCard(item));
   });
+  elements.librarySearchResults.appendChild(fragment);
+}
 
-  elements.genreFilters.appendChild(fragment);
+function setLibraryViewMode(mode) {
+  state.libraryViewMode = mode === "search" ? "search" : "home";
+  const inSearchMode = state.libraryViewMode === "search";
+  elements.librarySearchView?.classList.toggle("hidden", !inSearchMode);
+  elements.libraryGrid?.classList.toggle("hidden", inSearchMode);
+  elements.openSearchView?.classList.toggle("hidden", inSearchMode);
+  elements.openHomeView?.classList.toggle("hidden", !inSearchMode);
+
+  if (inSearchMode) {
+    renderSearchControls();
+    renderSearchLibrary();
+    window.requestAnimationFrame(() => elements.librarySearchInput?.focus());
+  } else {
+    renderGroupedLibrary();
+  }
+}
+
+function renderLibrary() {
+  if (state.libraryViewMode === "search") {
+    renderSearchControls();
+    renderSearchLibrary();
+    return;
+  }
+  renderGroupedLibrary();
 }
 
 function showLibraryView(pushState = false) {
@@ -1156,18 +1366,57 @@ function wireEvents() {
     void openMangaById(mangaId, false, fallbackItem, contentKey);
   });
 
-  elements.genreFilters?.addEventListener("click", (event) => {
+  elements.openSearchView?.addEventListener("click", () => {
+    setLibraryViewMode("search");
+  });
+
+  elements.openHomeView?.addEventListener("click", () => {
+    setLibraryViewMode("home");
+  });
+
+  elements.librarySearchInput?.addEventListener("input", (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLElement)) {
+    if (!(target instanceof HTMLInputElement)) {
       return;
     }
-    const btn = target.closest("[data-genre-filter]");
-    if (!(btn instanceof HTMLElement)) {
+    state.searchQuery = target.value;
+    renderSearchLibrary();
+  });
+
+  elements.librarySortSelect?.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement)) {
       return;
     }
-    state.selectedGenre = String(btn.getAttribute("data-genre-filter") || "").trim();
-    renderGenreFilters();
-    renderLibrary();
+    state.searchSort = target.value || "relevance";
+    renderSearchLibrary();
+  });
+
+  elements.libraryGenreSelect?.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement)) {
+      return;
+    }
+    state.searchGenre = target.value || "";
+    renderSearchLibrary();
+  });
+
+  elements.libraryCategorySelect?.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement)) {
+      return;
+    }
+    state.searchCategory = target.value || "";
+    renderSearchLibrary();
+  });
+
+  elements.libraryStatusSelect?.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement)) {
+      return;
+    }
+    state.searchStatus = target.value || "";
+    renderSearchLibrary();
   });
 
   state.eventsBound = true;
@@ -1351,7 +1600,8 @@ async function init() {
   wireAccountIdentity();
   wireEvents();
   await loadContent();
-  renderGenreFilters();
+  renderSearchControls();
+  setLibraryViewMode("home");
 
   const params = new URLSearchParams(window.location.search);
   const mangaId = params.get("manga");
@@ -1379,6 +1629,7 @@ async function init() {
 }
 
 void init();
+
 
 
 
