@@ -7,8 +7,9 @@ def validate_manga_post_payload(payload):
     if not manga_id:
         errors.append("manga_id is required.")
 
-    if "title" in payload and not str(payload.get("title", "")).strip():
-        errors.append("title must be non-empty when provided.")
+    title = str(payload.get("title", "")).strip()
+    if not title:
+        errors.append("title is required.")
 
     if "keywords" in payload:
         keywords = payload.get("keywords")

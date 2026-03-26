@@ -66,7 +66,7 @@
           <path d="M20 4v6h-6"></path>
         </svg>
       </button>
-      <button id="addMangaBtn" type="button" class="admin-btn" title="Add New Manga" aria-label="Add New Manga">Add New</button>
+      <button id="addMangaBtn" type="button" class="admin-btn" title="Add New Manga" aria-label="Add New Manga">Add New Series</button>
     </section>
 
     <section id="adminGridShell" class="admin-grid-shell">
@@ -77,8 +77,8 @@
               <th class="col-expand">&nbsp;</th>
               <th class="col-cover">&nbsp;</th>
               <th>Title</th>
+              <th>Keywords</th>
               <th>Publisher</th>
-              <th>Series</th>
               <th class="col-action">&nbsp;</th>
             </tr>
           </thead>
@@ -101,8 +101,10 @@
         <div class="manga-form-layout">
           <section class="manga-form-top">
             <div class="manga-form-primary">
-              <label><span>Title</span><input id="titleInput" name="title" type="text" /></label>
-              <label><span>Series</span><input id="seriesInput" name="series" type="text" /></label>
+              <label>
+                <span>Title <span class="required-indicator" aria-hidden="true">*</span></span>
+                <input id="titleInput" name="title" type="text" required aria-required="true" />
+              </label>
               <label><span>Synopsis</span><textarea id="synopsisInput" name="synopsis" rows="3"></textarea></label>
               <label><span>Publisher</span><input id="publisherInput" name="publisher" type="text" /></label>
             </div>
@@ -204,10 +206,12 @@
                 </select>
               </label>
               <label><span>Sequence Number</span><input id="sequenceNumberInput" name="sequence_number" type="number" min="1" /></label>
-              <label><span>Title</span><input id="contentTitleInput" name="title" type="text" /></label>
+              <label>
+                <span>Title <span class="required-indicator" aria-hidden="true">*</span></span>
+                <input id="contentTitleInput" name="title" type="text" required aria-required="true" />
+              </label>
               <label><span>External Content ID</span><input id="externalContentIdInput" name="external_content_id" type="text" /></label>
               <label><span>Author</span><input id="contentAuthorInput" name="author" type="text" /></label>
-              <label><span>Price</span><input id="priceInput" name="price" type="text" /></label>
               <label><span>File Format</span><input id="fileFormatInput" name="file_format" type="text" /></label>
             </div>
             <div class="manga-form-cover content-upload-stack">

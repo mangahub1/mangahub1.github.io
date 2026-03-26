@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BluPetal Reader</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon.png" />
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    html, body {
+      height: 100%;
+    }
+    #readerView {
+      height: 100vh;
+    }
+    .reader-shell {
+      height: 100%;
+      min-height: 0;
+    }
+    #canvasStage {
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+    #spreadContainer {
+      height: 100%;
+      align-items: stretch;
+      justify-items: stretch;
+    }
+    #leftPanel {
+      width: 100%;
+      height: 100%;
+      place-items: stretch;
+    }
+    .epub-viewport {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      background: #24262c;
+      border-radius: 0.25rem;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .epub-viewport .epub-container {
+      width: 100% !important;
+      height: 100% !important;
+      max-width: none !important;
+      max-height: none !important;
+      margin: auto !important;
+      display: flex !important;
+      align-items: stretch !important;
+      justify-content: center !important;
+      gap: 0 !important;
+    }
+    .epub-viewport .epub-view {
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    .epub-viewport.is-single-page .epub-container {
+      width: 100% !important;
+      justify-content: center !important;
+    }
+    .epub-viewport.is-single-page .epub-view {
+      margin-left: auto !important;
+      margin-right: auto !important;
+    }
+    .epub-viewport > div {
+      width: 100% !important;
+      height: 100% !important;
+    }
+    .epub-viewport iframe {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+      border: 0;
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <section id="readerView" class="reader-view is-loading">
+    <div id="readerLoading" class="reader-loading" role="status" aria-live="polite" aria-hidden="false">
+      <div class="reader-loading-content">
+        <img src="./assets/logo-header.png" alt="" class="reader-loading-logo" decoding="async" />
+        <div class="reader-loading-spinner" aria-hidden="true"></div>
+        <p id="readerLoadingText" class="reader-loading-text">Loading...</p>
+      </div>
+    </div>
+
+    <header class="topbar">
+      <div class="topbar-track">
+        <a href="./library.html" id="libraryLink" class="library-link-btn icon-only" aria-label="Back">
+          <svg class="back-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <polyline points="14,6 8,12 14,18"></polyline>
+          </svg>
+        </a>
+        <div class="toolbar-pill" aria-label="Reader toolbar">
+          <button id="zoomOut" class="icon-btn" type="button" aria-label="Zoom out">
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="5.5"></circle>
+              <line x1="7.5" y1="10.5" x2="13.5" y2="10.5"></line>
+              <line x1="15" y1="15" x2="20" y2="20"></line>
+            </svg>
+          </button>
+          <span id="zoomValue" class="zoom-badge" aria-live="polite">100%</span>
+          <button id="zoomIn" class="icon-btn" type="button" aria-label="Zoom in">
+            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="5.5"></circle>
+              <line x1="10.5" y1="7.5" x2="10.5" y2="13.5"></line>
+              <line x1="7.5" y1="10.5" x2="13.5" y2="10.5"></line>
+              <line x1="15" y1="15" x2="20" y2="20"></line>
+            </svg>
+          </button>
+          <span class="toolbar-divider" aria-hidden="true"></span>
+          <button id="directionToggle" class="direction-btn" type="button" aria-label="Toggle reading direction">
+            <svg class="icon-svg direction-arrow" viewBox="0 0 24 24" aria-hidden="true">
+              <line x1="6.5" y1="8.5" x2="17.5" y2="8.5"></line>
+              <polyline points="14.5,5.5 17.5,8.5 14.5,11.5"></polyline>
+              <line x1="17.5" y1="15.5" x2="6.5" y2="15.5"></line>
+              <polyline points="9.5,12.5 6.5,15.5 9.5,18.5"></polyline>
+            </svg>
+            <span id="directionValue">RTL</span>
+          </button>
+        </div>
+        <div class="topbar-fill" aria-hidden="true"></div>
+      </div>
+      <button id="bookmarkToggle" class="icon-btn bookmark-btn" type="button" aria-label="Bookmark page" aria-pressed="false">
+        <svg class="icon-svg bookmark-svg" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 4h10v16l-5-3.5L7 20z"></path>
+        </svg>
+      </button>
+    </header>
+
+    <main class="reader-shell">
+      <section id="errorBanner" class="error-banner hidden" role="alert" aria-live="assertive"></section>
+      <section id="canvasStage" class="canvas-stage" aria-label="EPUB reading area">
+        <div id="spreadContainer" class="spread spread-single">
+          <article class="page-panel" id="leftPanel">
+            <div id="epubViewport" class="epub-viewport" aria-label="EPUB content"></div>
+            <div id="leftFallback" class="panel-fallback hidden"></div>
+          </article>
+          <article class="page-panel hidden" id="rightPanel">
+            <div id="rightFallback" class="panel-fallback hidden"></div>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="pager" aria-label="Reading navigation">
+      <button id="leftNav" type="button">
+        <span class="pager-arrow" aria-hidden="true">
+          <svg class="pager-arrow-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <polyline points="14,6 8,12 14,18"></polyline>
+          </svg>
+        </span>
+        <span class="pager-label">Previous</span>
+      </button>
+      <div id="pageIndicator" aria-live="polite">0%</div>
+      <button id="rightNav" type="button">
+        <span class="pager-label">Next</span>
+        <span class="pager-arrow" aria-hidden="true">
+          <svg class="pager-arrow-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <polyline points="10,6 16,12 10,18"></polyline>
+          </svg>
+        </span>
+      </button>
+    </footer>
+  </section>
+
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+  <script type="module" src="./auth/auth-guard.js"></script>
+  <script type="module" src="./epub-reader.js"></script>
+</body>
+</html>

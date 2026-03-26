@@ -65,7 +65,6 @@ const elements = {
   mangaIdInput: document.getElementById("mangaIdInput"),
   titleInput: document.getElementById("titleInput"),
   publisherInput: document.getElementById("publisherInput"),
-  seriesInput: document.getElementById("seriesInput"),
   ageRatingInput: document.getElementById("ageRatingInput"),
   japaneseTitleInput: document.getElementById("japaneseTitleInput"),
   coverImageInput: document.getElementById("coverImageInput"),
@@ -100,7 +99,6 @@ const elements = {
   contentTitleInput: document.getElementById("contentTitleInput"),
   externalContentIdInput: document.getElementById("externalContentIdInput"),
   contentAuthorInput: document.getElementById("contentAuthorInput"),
-  priceInput: document.getElementById("priceInput"),
   fileFormatInput: document.getElementById("fileFormatInput"),
   contentCoverUrlInput: document.getElementById("contentCoverUrlInput"),
   fileUrlInput: document.getElementById("fileUrlInput"),
@@ -438,13 +436,22 @@ function hasUploadedContentFile(item) {
   return Boolean(String(item?.file_url || "").trim());
 }
 
-function isPdfContentItem(item) {
+function detectContentFileFormat(item) {
   const fileUrl = String(item?.file_url || "").trim();
-  if (!fileUrl) return false;
+  if (!fileUrl) return "";
   const normalizedFormat = String(item?.file_format || "").trim().toLowerCase();
-  if (normalizedFormat === "pdf") return true;
+  if (normalizedFormat === "pdf" || normalizedFormat === "epub") {
+    return normalizedFormat;
+  }
   const filePath = fileUrl.split("?")[0].split("#")[0].toLowerCase();
-  return filePath.endsWith(".pdf");
+  if (filePath.endsWith(".pdf")) return "pdf";
+  if (filePath.endsWith(".epub")) return "epub";
+  return "";
+}
+
+function isReadableContentItem(item) {
+  const format = detectContentFileFormat(item);
+  return format === "pdf" || format === "epub";
 }
 
 function getContentFileStatusLabel(item) {
@@ -457,10 +464,12 @@ function getContentFileStatusLabel(item) {
 }
 
 function buildReaderPreviewUrl(item) {
-  const pdfUrl = String(item?.file_url || "").trim();
-  if (!pdfUrl) return "";
+  const fileUrl = String(item?.file_url || "").trim();
+  if (!fileUrl) return "";
+  const format = detectContentFileFormat(item);
+  if (!format) return "";
 
-  const url = new URL("../../library.html", window.location.href);
+  const url = new URL(format === "epub" ? "../../epub-reader.html" : "../../library.html", window.location.href);
   const title = String(item?.title || item?.content_key || "Preview").trim();
   if (title) {
     url.searchParams.set("title", title);
@@ -472,7 +481,7 @@ function buildReaderPreviewUrl(item) {
   }
 
   url.searchParams.set("source", "admin");
-  url.searchParams.set("pdf", pdfUrl);
+  url.searchParams.set(format, fileUrl);
   return url.toString();
 }
 
@@ -592,7 +601,9 @@ function renderInlineContentRow(mangaId) {
           .map((item) => {
             const contentKey = escapeHtml(item.content_key);
             const fileStatusLabel = getContentFileStatusLabel(item);
-            const canViewInReader = isPdfContentItem(item);
+            const fileFormat = detectContentFileFormat(item);
+            const canViewInReader = isReadableContentItem(item);
+            const viewLabel = fileFormat ? `View ${fileFormat.toUpperCase()}` : "View";
             return `
               <tr>
                 <td class="col-cover-cell">${renderCoverThumb(item.cover_url, item.title || item.content_key)}</td>
@@ -605,7 +616,7 @@ function renderInlineContentRow(mangaId) {
                     ${
                       canViewInReader
                         ? `
-                    <button type="button" class="row-action-btn icon-action-btn" data-view-content="${contentKey}" data-content-manga-id="${escapeHtml(mangaId)}" title="View PDF" aria-label="View PDF">
+                    <button type="button" class="row-action-btn icon-action-btn" data-view-content="${contentKey}" data-content-manga-id="${escapeHtml(mangaId)}" title="${escapeHtml(viewLabel)}" aria-label="${escapeHtml(viewLabel)}">
                       <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M2 12s3.8-6 10-6 10 6 10 6-3.8 6-10 6-10-6-10-6z"></path>
                         <circle cx="12" cy="12" r="3"></circle>
@@ -687,7 +698,6 @@ function normalizeContent(item) {
     external_content_id: String(item?.external_content_id || "").trim(),
     synopsis: String(item?.synopsis || "").trim(),
     author: String(item?.author || "").trim(),
-    price: String(item?.price || "").trim(),
     file_format: String(item?.file_format || "").trim(),
     cover_url: String(item?.cover_url || "").trim(),
     file_url: String(item?.file_url || "").trim(),
@@ -708,7 +718,15 @@ function applyMangaFilters() {
   const search = String(elements.searchInput.value || "").trim().toLowerCase();
   state.filteredMangaItems = state.mangaItems.filter((item) => {
     if (!search) return true;
-    const haystack = [item.manga_id, item.title, item.publisher, item.series].join(" ").toLowerCase();
+    const haystack = [
+      item.manga_id,
+      item.title,
+      item.publisher,
+      item.series,
+      Array.isArray(item.keywords) ? item.keywords.join(" ") : "",
+    ]
+      .join(" ")
+      .toLowerCase();
     return haystack.includes(search);
   });
   renderMangaGrid();
@@ -747,8 +765,8 @@ function renderMangaGrid() {
       </td>
       <td class="col-cover-cell">${renderCoverThumb(item.cover_url, item.title)}</td>
       <td>${escapeHtml(item.title || "-")}</td>
+      <td>${escapeHtml(Array.isArray(item.keywords) && item.keywords.length ? item.keywords.join(", ") : "-")}</td>
       <td>${escapeHtml(item.publisher || "-")}</td>
-      <td>${escapeHtml(item.series || "-")}</td>
       <td>
         <div class="row-actions">
           <button type="button" class="row-action-btn icon-action-btn" data-edit-manga="${escapeHtml(item.manga_id)}" title="Edit" aria-label="Edit">
@@ -785,7 +803,6 @@ function openMangaModal(mode, item = null) {
   elements.mangaIdInput.readOnly = mode === "update";
   elements.titleInput.value = item?.title || "";
   elements.publisherInput.value = item?.publisher || "";
-  elements.seriesInput.value = item?.series || "";
   elements.ageRatingInput.value = item?.age_rating || "";
   elements.japaneseTitleInput.value = item?.japanese_title || "";
   elements.keywordsInput.value = Array.isArray(item?.keywords) ? item.keywords.join(", ") : "";
@@ -819,7 +836,6 @@ function buildMangaPayload() {
     manga_id: mangaId,
     title: String(elements.titleInput.value || "").trim(),
     publisher: String(elements.publisherInput.value || "").trim(),
-    series: String(elements.seriesInput.value || "").trim(),
     age_rating: String(elements.ageRatingInput.value || "").trim(),
     japanese_title: String(elements.japaneseTitleInput.value || "").trim(),
     cover_url: String(state.editingManga?.cover_url || "").trim(),
@@ -887,6 +903,10 @@ async function saveManga(event) {
   }
   if (!payload.manga_id) {
     showMangaModalError("manga_id is required.");
+    return;
+  }
+  if (!payload.title) {
+    showMangaModalError("Title is required.");
     return;
   }
 
@@ -1001,7 +1021,6 @@ function openContentModal(mode, item = null) {
   elements.contentTitleInput.value = item?.title || "";
   elements.externalContentIdInput.value = item?.external_content_id || "";
   elements.contentAuthorInput.value = item?.author || "";
-  elements.priceInput.value = item?.price || "";
   elements.fileFormatInput.value = item?.file_format || "";
   elements.contentCoverUrlInput.value = item?.cover_url || "";
   elements.fileUrlInput.value = item?.file_url || "";
@@ -1052,7 +1071,6 @@ function buildContentPayload() {
     external_content_id: String(elements.externalContentIdInput.value || "").trim(),
     synopsis: String(elements.contentSynopsisInput.value || "").trim(),
     author: String(elements.contentAuthorInput.value || "").trim(),
-    price: String(elements.priceInput.value || "").trim(),
     file_format: String(elements.fileFormatInput.value || "").trim(),
     cover_url: String(elements.contentCoverUrlInput.value || "").trim(),
     file_url: String(elements.fileUrlInput.value || "").trim(),
@@ -1141,6 +1159,10 @@ async function saveContent(event) {
   }
   if (payload.content_type !== "Volume" && payload.content_type !== "Chapter") {
     showContentModalError("Type is required. Select Volume or Chapter.");
+    return;
+  }
+  if (!payload.title) {
+    showContentModalError("Title is required.");
     return;
   }
 

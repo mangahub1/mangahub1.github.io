@@ -281,6 +281,17 @@ function normalizeCategoryItem(item) {
   const sequenceNumber = Number.isFinite(parsedSequenceNumber) && parsedSequenceNumber > 0
     ? parsedSequenceNumber
     : parsedContentMeta.sequenceNumber;
+  const fileUrl = String(item?.file_url || "").trim();
+  const explicitFormat = String(item?.file_format || "").trim().toLowerCase();
+  const filePath = fileUrl.toLowerCase().split("?")[0].split("#")[0];
+  const inferredFormat = filePath.endsWith(".epub")
+    ? "epub"
+    : filePath.endsWith(".pdf")
+      ? "pdf"
+      : "";
+  const fileFormat = explicitFormat === "pdf" || explicitFormat === "epub"
+    ? explicitFormat
+    : inferredFormat;
 
   return {
     id: itemId,
@@ -290,6 +301,8 @@ function normalizeCategoryItem(item) {
     title,
     cover,
     pdf: "",
+    readerUrl: fileUrl,
+    readerFormat: fileFormat,
     groups: [categoryId],
     genres: tags,
     description: "",
@@ -330,9 +343,12 @@ function inferItemStatus(item) {
 
 function buildQueryPreviewItem(params) {
   const pdf = String(params.get("pdf") || "").trim();
-  if (!pdf) {
+  const epub = String(params.get("epub") || "").trim();
+  const readerUrl = pdf || epub;
+  if (!readerUrl) {
     return null;
   }
+  const readerFormat = epub ? "epub" : "pdf";
 
   const id = String(params.get("manga") || "preview").trim() || "preview";
   const title = String(params.get("title") || "Preview").trim() || "Preview";
@@ -344,7 +360,9 @@ function buildQueryPreviewItem(params) {
     contentKey: String(params.get("content_key") || "").trim(),
     itemType: "MANGA_CONTENT",
     title,
-    pdf,
+    pdf: readerFormat === "pdf" ? readerUrl : "",
+    readerUrl,
+    readerFormat,
     cover: cover || FALLBACK_COVER,
     groups: [],
     genres: [],
@@ -1357,7 +1375,7 @@ function wireEvents() {
     const fallbackItem = buildQueryPreviewItem(params);
     if (!mangaId) {
       if (fallbackItem) {
-        void loadPdfForItem(fallbackItem);
+        void loadReaderForItem(fallbackItem);
         return;
       }
       showLibraryView(false);
@@ -1422,11 +1440,22 @@ function wireEvents() {
   state.eventsBound = true;
 }
 
-async function loadFirstPdfForManga(mangaId, preferredContentKey = "") {
+function inferReadableFormat(fileUrl, fileFormat = "") {
+  const explicit = String(fileFormat || "").trim().toLowerCase();
+  if (explicit === "pdf" || explicit === "epub") {
+    return explicit;
+  }
+  const path = String(fileUrl || "").trim().toLowerCase().split("?")[0].split("#")[0];
+  if (path.endsWith(".epub")) return "epub";
+  if (path.endsWith(".pdf")) return "pdf";
+  return "";
+}
+
+async function loadFirstReadableFileForManga(mangaId, preferredContentKey = "") {
   const cleanMangaId = String(mangaId || "").trim();
   const cleanPreferredContentKey = String(preferredContentKey || "").trim();
   if (!cleanMangaId || !endpointLooksConfigured(endpoint.mangaContentGet)) {
-    return "";
+    return null;
   }
 
   const url = new URL(endpoint.mangaContentGet);
@@ -1435,7 +1464,7 @@ async function loadFirstPdfForManga(mangaId, preferredContentKey = "") {
   const data = responseData(response);
   const items = Array.isArray(data?.items) ? data.items : [];
   if (!items.length) {
-    return "";
+    return null;
   }
 
   const withFile = items
@@ -1443,11 +1472,12 @@ async function loadFirstPdfForManga(mangaId, preferredContentKey = "") {
       sequenceNumber: Number(item?.sequence_number),
       contentKey: String(item?.content_key || "").trim(),
       fileUrl: String(item?.file_url || "").trim(),
+      fileFormat: inferReadableFormat(item?.file_url, item?.file_format),
     }))
-    .filter((entry) => entry.fileUrl);
+    .filter((entry) => entry.fileUrl && (entry.fileFormat === "pdf" || entry.fileFormat === "epub"));
 
   if (!withFile.length) {
-    return "";
+    return null;
   }
 
   withFile.sort((a, b) => {
@@ -1460,30 +1490,40 @@ async function loadFirstPdfForManga(mangaId, preferredContentKey = "") {
   });
   if (cleanPreferredContentKey) {
     const preferred = withFile.find((entry) => entry.contentKey === cleanPreferredContentKey);
-    if (preferred?.fileUrl) {
-      return preferred.fileUrl;
+    if (preferred?.fileUrl && preferred?.fileFormat) {
+      return preferred;
     }
   }
-  return withFile[0].fileUrl;
+  return withFile[0];
 }
 
-async function ensureItemHasPdf(item, preferredContentKey = "") {
+async function ensureItemHasReadableFile(item, preferredContentKey = "") {
   if (!item || typeof item !== "object") {
     return item;
   }
-  const existingPdf = String(item.pdf || "").trim();
-  if (existingPdf) {
+  const existingUrl = String(item.readerUrl || item.pdf || "").trim();
+  const existingFormat = inferReadableFormat(existingUrl, item.readerFormat);
+  if (existingUrl && existingFormat) {
+    item.readerUrl = existingUrl;
+    item.readerFormat = existingFormat;
+    if (existingFormat === "pdf") {
+      item.pdf = existingUrl;
+    }
     return item;
   }
   try {
-    const pdf = await loadFirstPdfForManga(
+    const readable = await loadFirstReadableFileForManga(
       item.mangaId || item.id,
       preferredContentKey || item.contentKey
     );
-    if (!pdf) {
+    if (!readable?.fileUrl || !readable?.fileFormat) {
       return item;
     }
-    item.pdf = pdf;
+    item.readerUrl = readable.fileUrl;
+    item.readerFormat = readable.fileFormat;
+    if (readable.fileFormat === "pdf") {
+      item.pdf = readable.fileUrl;
+    }
     return item;
   } catch (error) {
     console.error("Failed to fetch manga content for reader:", error);
@@ -1491,14 +1531,30 @@ async function ensureItemHasPdf(item, preferredContentKey = "") {
   }
 }
 
-async function loadPdfForItem(item, preferredContentKey = "") {
-  const nextItem = await ensureItemHasPdf(item, preferredContentKey);
-  const pdfUrl = String(nextItem?.pdf || "").trim();
-  if (!pdfUrl) {
+function buildEpubReaderUrl(item, fileUrl) {
+  const url = new URL("./epub-reader.html", window.location.href);
+  url.searchParams.set("epub", fileUrl);
+  url.searchParams.set("title", item?.title || "Preview");
+  if (item?.cover) {
+    url.searchParams.set("cover", item.cover);
+  }
+  return url.toString();
+}
+
+async function loadReaderForItem(item, preferredContentKey = "") {
+  const nextItem = await ensureItemHasReadableFile(item, preferredContentKey);
+  const readerUrl = String(nextItem?.readerUrl || nextItem?.pdf || "").trim();
+  const readerFormat = inferReadableFormat(readerUrl, nextItem?.readerFormat);
+  if (!readerUrl || !readerFormat) {
     state.awaitingFirstRender = false;
     setReaderLoading(false);
     setError("No readable manga file found for this title.");
     showReaderView();
+    return;
+  }
+
+  if (readerFormat === "epub") {
+    window.location.assign(buildEpubReaderUrl(nextItem, readerUrl));
     return;
   }
 
@@ -1517,7 +1573,7 @@ async function loadPdfForItem(item, preferredContentKey = "") {
   document.title = `${nextItem.title} - BluPetal`;
 
   try {
-    const loadingTask = pdfjsLib.getDocument(pdfUrl);
+    const loadingTask = pdfjsLib.getDocument(readerUrl);
     state.pdfDoc = await loadingTask.promise;
     state.totalPdfPages = state.pdfDoc.numPages;
     state.spreads = buildSpreads(state.totalPdfPages, state.singlePageMode);
@@ -1536,7 +1592,7 @@ async function loadPdfForItem(item, preferredContentKey = "") {
     elements.leftPanel.classList.remove("hidden");
     elements.rightPanel.classList.add("hidden");
     showPanelFallback("left", "PDF could not be loaded.");
-    setError(`Could not load ${pdfUrl}. Verify the manga-content file URL is valid.`);
+    setError(`Could not load ${readerUrl}. Verify the manga-content file URL is valid.`);
     console.error(error);
   }
 }
@@ -1578,13 +1634,22 @@ async function openMangaById(
       nextUrl.searchParams.delete("content_key");
     }
     if (fallbackItem && fallbackItem.id === item.id) {
-      nextUrl.searchParams.set("pdf", fallbackItem.pdf);
+      const fallbackUrl = String(fallbackItem.readerUrl || fallbackItem.pdf || "").trim();
+      const fallbackFormat = inferReadableFormat(fallbackUrl, fallbackItem.readerFormat);
+      if (fallbackFormat === "epub") {
+        nextUrl.searchParams.set("epub", fallbackUrl);
+        nextUrl.searchParams.delete("pdf");
+      } else {
+        nextUrl.searchParams.set("pdf", fallbackUrl);
+        nextUrl.searchParams.delete("epub");
+      }
       nextUrl.searchParams.set("title", fallbackItem.title || "Preview");
       if (fallbackItem.cover) {
         nextUrl.searchParams.set("cover", fallbackItem.cover);
       }
     } else {
       nextUrl.searchParams.delete("pdf");
+      nextUrl.searchParams.delete("epub");
       nextUrl.searchParams.delete("title");
       nextUrl.searchParams.delete("cover");
       nextUrl.searchParams.delete("thumbnail");
@@ -1592,7 +1657,7 @@ async function openMangaById(
     window.history.pushState({}, "", nextUrl);
   }
 
-  await loadPdfForItem(item, cleanPreferredContentKey);
+  await loadReaderForItem(item, cleanPreferredContentKey);
 }
 
 async function init() {
@@ -1618,7 +1683,7 @@ async function init() {
   renderLibrary();
 
   if (!mangaId && fallbackItem) {
-    await loadPdfForItem(fallbackItem);
+    await loadReaderForItem(fallbackItem);
     return;
   }
   if (!mangaId) {

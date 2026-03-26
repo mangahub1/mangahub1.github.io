@@ -11,6 +11,9 @@ def validate_manga_content_post_payload(payload):
         errors.append("manga_id is required.")
     if not content_key:
         errors.append("content_key is required.")
+    title = str(payload.get("title", "")).strip()
+    if not title:
+        errors.append("title is required.")
 
     if "content_type" in payload and not isinstance(payload.get("content_type"), str):
         errors.append("content_type must be a string.")
@@ -46,6 +49,9 @@ def validate_manga_content_put_payload(payload):
         errors.append("manga_id is required.")
     if not content_key:
         errors.append("content_key is required.")
+    title = str(payload.get("title", "")).strip()
+    if not title:
+        errors.append("title is required.")
 
     if "content_type" in payload and not isinstance(payload.get("content_type"), str):
         errors.append("content_type must be a string.")
