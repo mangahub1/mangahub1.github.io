@@ -57,6 +57,14 @@
     .epub-viewport .epub-view {
       margin: 0 !important;
       padding: 0 !important;
+      display: flex !important;
+      align-items: center !important;
+    }
+    .epub-viewport:not(.is-single-page) .epub-view:first-child {
+      justify-content: flex-end !important;
+    }
+    .epub-viewport:not(.is-single-page) .epub-view:last-child {
+      justify-content: flex-start !important;
     }
     .epub-viewport.is-single-page .epub-container {
       width: 100% !important;

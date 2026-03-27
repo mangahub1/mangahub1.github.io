@@ -11,6 +11,7 @@ const PRIMARY_RENDER_OPTIONS = {
   height: "100%",
   flow: "paginated",
   spread: "auto",
+  gap: 0,
   minSpreadWidth: SINGLE_PAGE_BREAKPOINT,
   manager: "default",
 };
@@ -54,6 +55,205 @@ const elements = {
   bookmarkToggle: document.getElementById("bookmarkToggle"),
 };
 
+function isBlankEpubView(view) {
+  const iframe = view?.querySelector?.("iframe");
+  if (!iframe) return true;
+  try {
+    const doc = iframe.contentDocument;
+    if (!doc) return false;
+    const hasVisual = Boolean(doc.querySelector("img, svg, canvas, video, object"));
+    const text = String(doc.body?.textContent || "").trim();
+    return !hasVisual && text.length === 0;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function looksLikeDualPageInSingleIframe(iframe) {
+  if (!(iframe instanceof HTMLIFrameElement)) return false;
+  try {
+    const doc = iframe.contentDocument;
+    const root = doc?.documentElement;
+    const body = doc?.body;
+    const rootWidth = Number(root?.scrollWidth || 0);
+    const bodyWidth = Number(body?.scrollWidth || 0);
+    const viewportWidth = Number(iframe.clientWidth || 0);
+    const contentWidth = Math.max(rootWidth, bodyWidth);
+    if (contentWidth <= 0 || viewportWidth <= 0) return false;
+    return contentWidth / viewportWidth > 1.4;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function normalizeSpreadSeam() {
+  const container = elements.epubViewport?.querySelector?.(".epub-container");
+  if (!(container instanceof HTMLElement)) return;
+
+  const isSingle = elements.epubViewport.classList.contains("is-single-page");
+  const allViews = Array.from(container.querySelectorAll(".epub-view"));
+  if (!allViews.length) return;
+
+  const usableViews = allViews.filter((view) => view instanceof HTMLElement && !isBlankEpubView(view));
+  if (!usableViews.length) return;
+
+  container.style.gap = "0px";
+  container.style.columnGap = "0px";
+  container.style.margin = "0";
+  container.style.padding = "0";
+
+  if (isSingle || usableViews.length <= 1) {
+    container.style.position = "";
+    container.style.display = "flex";
+    container.style.justifyContent = "center";
+    container.style.alignItems = "center";
+    container.style.width = "100%";
+    container.style.height = "100%";
+    const primaryView = usableViews[0] instanceof HTMLElement ? usableViews[0] : null;
+    for (const view of allViews) {
+      if (!(view instanceof HTMLElement)) continue;
+      view.style.position = "";
+      view.style.flex = "";
+      view.style.left = "";
+      view.style.right = "";
+      view.style.top = "";
+      view.style.bottom = "";
+      view.style.width = "";
+      view.style.maxWidth = "";
+      view.style.minWidth = "";
+      view.style.height = "";
+      view.style.display = view === primaryView ? "flex" : "none";
+      view.style.alignItems = "center";
+      view.style.justifyContent = "center";
+      view.style.margin = "0";
+      view.style.padding = "0";
+      view.style.overflow = "visible";
+      if (view === primaryView) {
+        view.style.flex = "0 0 100%";
+        view.style.width = "100%";
+        view.style.maxWidth = "100%";
+        view.style.minWidth = "100%";
+        view.style.height = "100%";
+      }
+      const iframe = view.querySelector("iframe");
+      if (iframe instanceof HTMLElement) {
+        // Clear two-page constraints so cover/page-1 can render at natural fit.
+        if (view === primaryView) {
+          iframe.style.width = "100%";
+          iframe.style.height = "100%";
+          iframe.style.maxWidth = "100%";
+          iframe.style.maxHeight = "100%";
+          iframe.style.minWidth = "100%";
+          iframe.style.marginLeft = "0";
+          iframe.style.transform = "none";
+          iframe.style.transformOrigin = "";
+          if (state.currentSpineIndex === 0 || looksLikeDualPageInSingleIframe(iframe)) {
+            view.style.setProperty("flex", "0 0 50%", "important");
+            view.style.setProperty("width", "50%", "important");
+            view.style.setProperty("max-width", "50%", "important");
+            view.style.setProperty("min-width", "50%", "important");
+            view.style.setProperty("overflow", "hidden", "important");
+            try {
+              const doc = iframe.contentDocument;
+              if (doc) {
+                let styleEl = doc.getElementById("cover-single-page-fix");
+                if (!styleEl) {
+                  styleEl = doc.createElement("style");
+                  styleEl.id = "cover-single-page-fix";
+                  doc.head?.appendChild(styleEl);
+                }
+                styleEl.textContent =
+                  "html,body{margin:0!important;padding:0!important;width:100%!important;max-width:100%!important;overflow:hidden!important;}img,svg{display:block!important;max-width:100%!important;height:auto!important;}";
+              }
+            } catch (_error) {
+              // Ignore inaccessible iframe documents.
+            }
+            // Crop synthetic spread to one page at a predictable scale.
+            iframe.style.setProperty("width", "100%", "important");
+            iframe.style.setProperty("max-width", "100%", "important");
+            iframe.style.setProperty("min-width", "100%", "important");
+            iframe.style.setProperty("margin-left", "0", "important");
+            iframe.style.setProperty("transform", "translateX(0)", "important");
+          }
+        } else {
+          iframe.style.width = "";
+          iframe.style.height = "";
+          iframe.style.maxWidth = "";
+          iframe.style.maxHeight = "";
+          iframe.style.minWidth = "";
+          iframe.style.marginLeft = "";
+          iframe.style.transform = "";
+          iframe.style.transformOrigin = "";
+        }
+      }
+    }
+    return;
+  }
+
+  const leftView = usableViews[0];
+  const rightView = usableViews[1];
+
+  container.style.position = "";
+  container.style.display = "flex";
+  container.style.justifyContent = "center";
+  container.style.alignItems = "stretch";
+
+  for (const view of allViews) {
+    if (!(view instanceof HTMLElement)) continue;
+    view.style.margin = "0";
+    view.style.padding = "0";
+    view.style.overflow = "hidden";
+    if (view !== leftView && view !== rightView) {
+      view.style.display = "none";
+      continue;
+    }
+    view.style.display = "flex";
+    view.style.position = "";
+    view.style.left = "";
+    view.style.height = "100%";
+    view.style.flex = "0 0 50%";
+    view.style.width = "50%";
+    view.style.maxWidth = "50%";
+    view.style.minWidth = "50%";
+    view.style.alignItems = "center";
+    const iframe = view.querySelector("iframe");
+    if (iframe instanceof HTMLElement) {
+      iframe.style.width = "100%";
+      iframe.style.height = "100%";
+      iframe.style.display = "block";
+    }
+  }
+  leftView.style.justifyContent = "flex-end";
+  rightView.style.justifyContent = "flex-start";
+}
+
+function registerContentSeamOverrides(rendition) {
+  if (!rendition?.hooks?.content?.register) return;
+  rendition.hooks.content.register((contents) => {
+    try {
+      contents.addStylesheetRules({
+        html: {
+          margin: "0 !important",
+          padding: "0 !important",
+          "background-color": "#fff !important",
+        },
+        body: {
+          margin: "0 !important",
+          padding: "0 !important",
+          "background-color": "#fff !important",
+        },
+        "img,svg,canvas": {
+          margin: "0 !important",
+          padding: "0 !important",
+          display: "block !important",
+        },
+      });
+    } catch (_error) {
+      // Ignore malformed documents that reject rule injection.
+    }
+  });
+}
+
 function updateViewportSize() {
   const stageRect = elements.canvasStage?.getBoundingClientRect();
   const topbarHeight = document.querySelector(".topbar")?.getBoundingClientRect().height || 0;
@@ -61,8 +261,10 @@ function updateViewportSize() {
   const viewportWidth = Math.max(320, Math.floor(window.innerWidth - 16));
   const viewportHeight = Math.max(320, Math.floor(window.innerHeight - topbarHeight - pagerHeight - 16));
   if (!stageRect) return { width: viewportWidth, height: viewportHeight };
-  const width = Math.max(320, Math.floor(Math.max(stageRect.width - 16, viewportWidth)));
-  const height = Math.max(320, Math.floor(Math.max(stageRect.height - 16, viewportHeight)));
+  const stageWidth = Math.floor(stageRect.width - 16);
+  const stageHeight = Math.floor(stageRect.height - 16);
+  const width = Math.max(320, Number.isFinite(stageWidth) && stageWidth > 0 ? stageWidth : viewportWidth);
+  const height = Math.max(320, Number.isFinite(stageHeight) && stageHeight > 0 ? stageHeight : viewportHeight);
   elements.epubViewport.style.width = `${width}px`;
   elements.epubViewport.style.height = `${height}px`;
   return { width, height };
@@ -231,6 +433,7 @@ function applyZoom() {
     container.style.transform = `scale(${scale})`;
     container.style.width = "";
     container.style.height = "";
+    normalizeSpreadSeam();
   } else {
     state.rendition.themes.fontSize(`${state.zoom}%`);
   }
@@ -406,11 +609,17 @@ async function initReader(epubUrl, title) {
       void syncSpreadMode();
       updatePagerState();
       setReaderLoading(false);
-      requestAnimationFrame(() => applyZoom());
+      requestAnimationFrame(() => {
+        applyZoom();
+        normalizeSpreadSeam();
+      });
     });
     rendition.on("rendered", () => {
       setReaderLoading(false);
-      requestAnimationFrame(() => applyZoom());
+      requestAnimationFrame(() => {
+        applyZoom();
+        normalizeSpreadSeam();
+      });
     });
     rendition.on("displayError", (_section, error) => {
       setReaderLoading(false);
@@ -425,6 +634,7 @@ async function initReader(epubUrl, title) {
   const renderWithOptions = async (options) => {
     const { width, height } = updateViewportSize();
     state.rendition = state.book.renderTo("epubViewport", options);
+    registerContentSeamOverrides(state.rendition);
     attachRenditionEvents(state.rendition);
     applyReadingDirection();
     const firstSpineItem = state.book?.spine?.get?.(0) || state.book?.spine?.first?.();
