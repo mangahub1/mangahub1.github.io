@@ -42,6 +42,7 @@ const elements = {
   libraryLink: document.getElementById("libraryLink"),
   errorBanner: document.getElementById("errorBanner"),
   epubViewport: document.getElementById("epubViewport"),
+  leftPanel: document.getElementById("leftPanel"),
   leftFallback: document.getElementById("leftFallback"),
   leftNav: document.getElementById("leftNav"),
   rightNav: document.getElementById("rightNav"),
@@ -54,6 +55,213 @@ const elements = {
   directionValue: document.getElementById("directionValue"),
   bookmarkToggle: document.getElementById("bookmarkToggle"),
 };
+
+const coverCanvasState = {
+  canvas: null,
+  renderToken: 0,
+  visible: false,
+};
+
+function ensureCoverCanvas() {
+  if (coverCanvasState.canvas instanceof HTMLCanvasElement) {
+    return coverCanvasState.canvas;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.id = "coverCanvas";
+  canvas.className = "hidden";
+  canvas.style.background = "#fff";
+  canvas.style.borderRadius = "0.25rem";
+  canvas.style.display = "none";
+  canvas.style.maxWidth = "100%";
+  canvas.style.height = "auto";
+  canvas.style.marginLeft = "auto";
+  canvas.style.marginRight = "auto";
+  elements.leftPanel?.insertBefore(canvas, elements.leftFallback);
+  coverCanvasState.canvas = canvas;
+  return canvas;
+}
+
+function showCoverCanvas() {
+  const canvas = ensureCoverCanvas();
+  canvas.classList.remove("hidden");
+  canvas.style.display = "block";
+  coverCanvasState.visible = true;
+  if (elements.leftPanel) {
+    elements.leftPanel.style.display = "flex";
+    elements.leftPanel.style.alignItems = "center";
+    elements.leftPanel.style.justifyContent = "center";
+  }
+  elements.epubViewport.classList.add("hidden");
+}
+
+function hideCoverCanvas() {
+  if (!(coverCanvasState.canvas instanceof HTMLCanvasElement)) return;
+  coverCanvasState.canvas.classList.add("hidden");
+  coverCanvasState.canvas.style.display = "none";
+  coverCanvasState.visible = false;
+  elements.epubViewport.classList.remove("hidden");
+}
+
+function extractCoverImageSource(iframe) {
+  if (!(iframe instanceof HTMLIFrameElement)) return "";
+  try {
+    const doc = iframe.contentDocument;
+    if (!doc) return "";
+    const img = doc.querySelector("img");
+    if (img instanceof HTMLImageElement && img.src) {
+      return img.src;
+    }
+    const svgImage = doc.querySelector("image");
+    if (svgImage) {
+      const href = String(
+        svgImage.getAttribute("href") ||
+          svgImage.getAttributeNS("http://www.w3.org/1999/xlink", "href") ||
+          ""
+      ).trim();
+      if (href) return href;
+    }
+  } catch (_error) {
+    return "";
+  }
+  return "";
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Failed to load cover image source."));
+    img.src = src;
+  });
+}
+
+function findContentBounds(image) {
+  const off = document.createElement("canvas");
+  off.width = image.naturalWidth || image.width;
+  off.height = image.naturalHeight || image.height;
+  const ctx = off.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return { x: 0, y: 0, w: off.width, h: off.height };
+  ctx.drawImage(image, 0, 0, off.width, off.height);
+  const data = ctx.getImageData(0, 0, off.width, off.height).data;
+  const width = off.width;
+  const height = off.height;
+
+  const isInk = (idx) => {
+    const a = data[idx + 3];
+    if (a < 10) return false;
+    const r = data[idx];
+    const g = data[idx + 1];
+    const b = data[idx + 2];
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const lum = (r + g + b) / 3;
+    return lum < 248 || max - min > 6;
+  };
+
+  let left = 0;
+  let right = width - 1;
+  let top = 0;
+  let bottom = height - 1;
+
+  const colHasInk = (x) => {
+    for (let y = 0; y < height; y += 2) {
+      const idx = (y * width + x) * 4;
+      if (isInk(idx)) return true;
+    }
+    return false;
+  };
+  const rowHasInk = (y) => {
+    for (let x = 0; x < width; x += 2) {
+      const idx = (y * width + x) * 4;
+      if (isInk(idx)) return true;
+    }
+    return false;
+  };
+
+  while (left < right && !colHasInk(left)) left += 1;
+  while (right > left && !colHasInk(right)) right -= 1;
+  while (top < bottom && !rowHasInk(top)) top += 1;
+  while (bottom > top && !rowHasInk(bottom)) bottom -= 1;
+
+  const w = Math.max(1, right - left + 1);
+  const h = Math.max(1, bottom - top + 1);
+  return { x: left, y: top, w, h };
+}
+
+async function renderCoverCanvasIfNeeded() {
+  const isSingle = elements.epubViewport.classList.contains("is-single-page");
+  const isCover = state.currentSpineIndex === 0;
+  if (!isSingle || !isCover) {
+    hideCoverCanvas();
+    return;
+  }
+
+  const container = elements.epubViewport.querySelector(".epub-container");
+  const view = container?.querySelector?.(".epub-view");
+  const iframe = view?.querySelector?.("iframe");
+  if (!(iframe instanceof HTMLIFrameElement)) {
+    // Keep a previously-rendered cover canvas instead of flashing back to white iframe.
+    if (coverCanvasState.visible) return;
+    hideCoverCanvas();
+    return;
+  }
+
+  const src = extractCoverImageSource(iframe);
+  if (!src) {
+    if (coverCanvasState.visible) return;
+    hideCoverCanvas();
+    return;
+  }
+
+  const token = ++coverCanvasState.renderToken;
+  try {
+    const image = await loadImage(src);
+    if (token !== coverCanvasState.renderToken) return;
+
+    const bounds = findContentBounds(image);
+    const canvas = ensureCoverCanvas();
+    const viewportRect = elements.epubViewport.getBoundingClientRect();
+    const fitScale = Math.min(
+      viewportRect.width / bounds.w,
+      viewportRect.height / bounds.h
+    );
+    const displayW = Math.max(1, Math.floor(bounds.w * fitScale));
+    const displayH = Math.max(1, Math.floor(bounds.h * fitScale));
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.floor(displayW * dpr));
+    canvas.height = Math.max(1, Math.floor(displayH * dpr));
+    canvas.style.width = `${displayW}px`;
+    canvas.style.height = `${displayH}px`;
+
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) {
+      hideCoverCanvas();
+      return;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, displayW, displayH);
+    ctx.drawImage(
+      image,
+      bounds.x,
+      bounds.y,
+      bounds.w,
+      bounds.h,
+      0,
+      0,
+      displayW,
+      displayH
+    );
+    showCoverCanvas();
+  } catch (_error) {
+    // Avoid late white-layer fallback once cover canvas is successfully shown.
+    if (!coverCanvasState.visible) {
+      hideCoverCanvas();
+    }
+  }
+}
 
 function isBlankEpubView(view) {
   const iframe = view?.querySelector?.("iframe");
@@ -148,11 +356,6 @@ function normalizeSpreadSeam() {
           iframe.style.transform = "none";
           iframe.style.transformOrigin = "";
           if (state.currentSpineIndex === 0 || looksLikeDualPageInSingleIframe(iframe)) {
-            view.style.setProperty("flex", "0 0 50%", "important");
-            view.style.setProperty("width", "50%", "important");
-            view.style.setProperty("max-width", "50%", "important");
-            view.style.setProperty("min-width", "50%", "important");
-            view.style.setProperty("overflow", "hidden", "important");
             try {
               const doc = iframe.contentDocument;
               if (doc) {
@@ -174,6 +377,12 @@ function normalizeSpreadSeam() {
             iframe.style.setProperty("min-width", "100%", "important");
             iframe.style.setProperty("margin-left", "0", "important");
             iframe.style.setProperty("transform", "translateX(0)", "important");
+
+            // Keep cover panel full-width in single-page mode.
+            view.style.setProperty("flex", "0 0 100%", "important");
+            view.style.setProperty("width", "100%", "important");
+            view.style.setProperty("max-width", "100%", "important");
+            view.style.setProperty("min-width", "100%", "important");
           }
         } else {
           iframe.style.width = "";
@@ -468,7 +677,17 @@ function updatePageIndicator(location) {
 async function goNext() {
   if (!state.rendition) return;
   const before = getCurrentSpineIndex();
-  const nextIndex = Math.min(getSpineLength() - 1, before + 1);
+  const total = getSpineLength();
+  const inSpreadMode = state.activeSpreadMode === "auto";
+  let nextIndex = before + 1;
+
+  if (inSpreadMode && before > 0) {
+    // In double-page mode, move by spreads: 2/3 -> 4/5 -> 6/7 ...
+    const spreadStart = before % 2 === 0 ? before - 1 : before;
+    nextIndex = spreadStart + 2;
+  }
+
+  nextIndex = Math.min(total - 1, nextIndex);
   if (nextIndex !== before) {
     await displaySpineIndex(nextIndex);
   }
@@ -477,7 +696,15 @@ async function goNext() {
 async function goPrev() {
   if (!state.rendition) return;
   const before = getCurrentSpineIndex();
-  const prevIndex = Math.max(0, before - 1);
+  const inSpreadMode = state.activeSpreadMode === "auto";
+  let prevIndex = before - 1;
+
+  if (inSpreadMode && before > 0) {
+    const spreadStart = before % 2 === 0 ? before - 1 : before;
+    prevIndex = spreadStart <= 1 ? 0 : spreadStart - 2;
+  }
+
+  prevIndex = Math.max(0, prevIndex);
   if (prevIndex !== before) {
     await displaySpineIndex(prevIndex);
   }
@@ -575,6 +802,7 @@ function wireEvents() {
     state.rendition?.resize(width, height);
     void syncSpreadMode();
     updatePagerState();
+    void renderCoverCanvasIfNeeded();
   });
 }
 
@@ -612,6 +840,7 @@ async function initReader(epubUrl, title) {
       requestAnimationFrame(() => {
         applyZoom();
         normalizeSpreadSeam();
+        void renderCoverCanvasIfNeeded();
       });
     });
     rendition.on("rendered", () => {
@@ -619,6 +848,7 @@ async function initReader(epubUrl, title) {
       requestAnimationFrame(() => {
         applyZoom();
         normalizeSpreadSeam();
+        void renderCoverCanvasIfNeeded();
       });
     });
     rendition.on("displayError", (_section, error) => {
