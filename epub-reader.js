@@ -33,6 +33,14 @@ const state = {
   currentCfi: "",
   singlePageMode: window.innerWidth < SINGLE_PAGE_BREAKPOINT,
   activeSpreadMode: "",
+  spreads: [],
+  currentSpread: 0,
+  syncingSpread: false,
+  coverImageSrc: "",
+  coverSessionActive: true,
+  initializingCover: true,
+  hasUserNavigated: false,
+  correctingCoverRelocation: false,
 };
 
 const elements = {
@@ -190,24 +198,18 @@ function findContentBounds(image) {
 }
 
 async function renderCoverCanvasIfNeeded() {
-  const isSingle = elements.epubViewport.classList.contains("is-single-page");
-  const isCover = state.currentSpineIndex === 0;
-  if (!isSingle || !isCover) {
+  if (!state.coverSessionActive) {
     hideCoverCanvas();
     return;
   }
 
-  const container = elements.epubViewport.querySelector(".epub-container");
-  const view = container?.querySelector?.(".epub-view");
-  const iframe = view?.querySelector?.("iframe");
-  if (!(iframe instanceof HTMLIFrameElement)) {
-    // Keep a previously-rendered cover canvas instead of flashing back to white iframe.
-    if (coverCanvasState.visible) return;
-    hideCoverCanvas();
-    return;
+  let src = String(state.coverImageSrc || "").trim();
+  if (!src) {
+    const container = elements.epubViewport.querySelector(".epub-container");
+    const view = container?.querySelector?.(".epub-view");
+    const iframe = view?.querySelector?.("iframe");
+    src = extractCoverImageSource(iframe);
   }
-
-  const src = extractCoverImageSource(iframe);
   if (!src) {
     if (coverCanvasState.visible) return;
     hideCoverCanvas();
@@ -493,6 +495,47 @@ function getSpineItemAt(index) {
   return items[index] || null;
 }
 
+function buildSpreads(totalPages, singlePageMode = false) {
+  const spreads = [];
+  if (totalPages >= 1) {
+    spreads.push({ type: "cover", pages: [0, null] });
+  }
+
+  if (singlePageMode) {
+    for (let pageIndex = 1; pageIndex < totalPages; pageIndex += 1) {
+      spreads.push({ type: "spread", pages: [pageIndex, null] });
+    }
+  } else {
+    for (let pageIndex = 1; pageIndex < totalPages; pageIndex += 2) {
+      const right = pageIndex + 1 < totalPages ? pageIndex + 1 : null;
+      spreads.push({ type: "spread", pages: [pageIndex, right] });
+    }
+  }
+
+  return spreads;
+}
+
+function clampSpread(index) {
+  const max = Math.max(0, state.spreads.length - 1);
+  return Math.max(0, Math.min(max, index));
+}
+
+function getActiveSpread() {
+  return state.spreads[state.currentSpread] || { type: "cover", pages: [0, null] };
+}
+
+function getActiveAnchorSpineIndex() {
+  const spread = getActiveSpread();
+  const page = Array.isArray(spread.pages) ? spread.pages.find((p) => Number.isInteger(p)) : 0;
+  return Number.isInteger(page) ? page : 0;
+}
+
+function findSpreadIndexForSpine(spineIndex) {
+  if (!Number.isInteger(spineIndex) || spineIndex < 0) return 0;
+  const idx = state.spreads.findIndex((spread) => Array.isArray(spread.pages) && spread.pages.includes(spineIndex));
+  return idx >= 0 ? idx : 0;
+}
+
 function getCurrentSpineIndex() {
   const currentLocation = state.rendition?.currentLocation?.();
   const nextIndex = Number(currentLocation?.start?.index);
@@ -528,9 +571,9 @@ function updateDirectionalLabels() {
 
 function updatePagerState() {
   const total = getSpineLength();
-  const current = Math.max(0, Math.min(total - 1, getCurrentSpineIndex()));
-  const atStart = current <= 0;
-  const atEnd = current >= total - 1;
+  const current = Math.max(0, Math.min(total - 1, getActiveAnchorSpineIndex()));
+  const atStart = state.currentSpread <= 0;
+  const atEnd = state.currentSpread >= Math.max(0, state.spreads.length - 1);
 
   if (state.direction === "ltr") {
     elements.leftNav.disabled = atStart;
@@ -540,24 +583,52 @@ function updatePagerState() {
     elements.rightNav.disabled = atStart;
   }
 
-  elements.pageIndicator.textContent = `${current + 1} / ${Math.max(1, total)}`;
+  if (state.singlePageMode) {
+    const displayPage = current + 1;
+    elements.pageIndicator.textContent = `${displayPage} / ${Math.max(1, total)}`;
+    return;
+  }
+
+  const spreadTotal = Math.max(1, state.spreads.length || Math.ceil(Math.max(1, total) / 2));
+  const spreadDisplay = Math.max(1, Math.min(spreadTotal, state.currentSpread + 1));
+  elements.pageIndicator.textContent = `${spreadDisplay} / ${spreadTotal}`;
 }
 
 async function syncSpreadMode() {
-  if (!state.rendition) return;
-  const total = getSpineLength();
-  const current = getCurrentSpineIndex();
-  const atEdge = current <= 0 || current >= total - 1;
-  const nextMode = state.singlePageMode || atEdge ? "none" : "auto";
+  if (!state.rendition || state.syncingSpread) return;
+  const spread = getActiveSpread();
+  const left = Number.isInteger(spread.pages?.[0]) ? spread.pages[0] : 0;
+  const right = Number.isInteger(spread.pages?.[1]) ? spread.pages[1] : null;
+  const nextMode = right === null ? "none" : "auto";
   elements.epubViewport.classList.toggle("is-single-page", nextMode === "none");
-  if (state.activeSpreadMode === nextMode) {
-    return;
-  }
-  state.activeSpreadMode = nextMode;
-  state.rendition.spread(nextMode);
-  const target = String(state.currentCfi || "").trim();
-  if (target) {
-    await state.rendition.display(target);
+  state.coverSessionActive = state.currentSpread === 0;
+
+  const applySpreadMode = state.activeSpreadMode !== nextMode;
+  const current = getCurrentSpineIndex();
+  const shouldDisplayTarget = current !== left || applySpreadMode;
+
+  state.syncingSpread = true;
+  try {
+    if (applySpreadMode) {
+      state.activeSpreadMode = nextMode;
+      state.rendition.spread(nextMode);
+    }
+    if (shouldDisplayTarget) {
+      const displayIndex = left;
+      const target = String(
+        getSpineItemAt(displayIndex)?.href || getSpineItemAt(displayIndex)?.cfiBase || ""
+      ).trim();
+      if (target) {
+        await state.rendition.display(target);
+        if (applySpreadMode && nextMode === "auto") {
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          await state.rendition.display(target);
+        }
+        state.currentSpineIndex = displayIndex;
+      }
+    }
+  } finally {
+    state.syncingSpread = false;
   }
 }
 
@@ -663,50 +734,40 @@ function applyReadingDirection() {
 }
 
 function updatePageIndicator(location) {
-  const spineIndex = Number(location?.start?.index);
+  void location;
   const spineTotal = getSpineLength();
-  if (Number.isFinite(spineIndex) && spineTotal > 0) {
-    const current = Math.max(1, Math.min(spineTotal, spineIndex + 1));
-    elements.pageIndicator.textContent = `${current} / ${spineTotal}`;
+  if (state.singlePageMode) {
+    const current = Math.max(1, Math.min(spineTotal, getActiveAnchorSpineIndex() + 1));
+    elements.pageIndicator.textContent = `${current} / ${Math.max(1, spineTotal)}`;
     return;
   }
 
-  elements.pageIndicator.textContent = `1 / ${spineTotal}`;
+  const spreadTotal = Math.max(1, state.spreads.length || Math.ceil(Math.max(1, spineTotal) / 2));
+  const spreadDisplay = Math.max(1, Math.min(spreadTotal, state.currentSpread + 1));
+  elements.pageIndicator.textContent = `${spreadDisplay} / ${spreadTotal}`;
 }
 
 async function goNext() {
   if (!state.rendition) return;
-  const before = getCurrentSpineIndex();
-  const total = getSpineLength();
-  const inSpreadMode = state.activeSpreadMode === "auto";
-  let nextIndex = before + 1;
-
-  if (inSpreadMode && before > 0) {
-    // In double-page mode, move by spreads: 2/3 -> 4/5 -> 6/7 ...
-    const spreadStart = before % 2 === 0 ? before - 1 : before;
-    nextIndex = spreadStart + 2;
-  }
-
-  nextIndex = Math.min(total - 1, nextIndex);
-  if (nextIndex !== before) {
-    await displaySpineIndex(nextIndex);
+  const nextSpread = clampSpread(state.currentSpread + 1);
+  if (nextSpread !== state.currentSpread) {
+    state.hasUserNavigated = true;
+    state.initializingCover = false;
+    state.currentSpread = nextSpread;
+    await syncSpreadMode();
+    updatePagerState();
   }
 }
 
 async function goPrev() {
   if (!state.rendition) return;
-  const before = getCurrentSpineIndex();
-  const inSpreadMode = state.activeSpreadMode === "auto";
-  let prevIndex = before - 1;
-
-  if (inSpreadMode && before > 0) {
-    const spreadStart = before % 2 === 0 ? before - 1 : before;
-    prevIndex = spreadStart <= 1 ? 0 : spreadStart - 2;
-  }
-
-  prevIndex = Math.max(0, prevIndex);
-  if (prevIndex !== before) {
-    await displaySpineIndex(prevIndex);
+  const prevSpread = clampSpread(state.currentSpread - 1);
+  if (prevSpread !== state.currentSpread) {
+    state.hasUserNavigated = true;
+    state.initializingCover = false;
+    state.currentSpread = prevSpread;
+    await syncSpreadMode();
+    updatePagerState();
   }
 }
 
@@ -797,7 +858,13 @@ function wireEvents() {
   });
 
   window.addEventListener("resize", () => {
-    state.singlePageMode = window.innerWidth < SINGLE_PAGE_BREAKPOINT;
+    const nextSinglePageMode = window.innerWidth < SINGLE_PAGE_BREAKPOINT;
+    if (nextSinglePageMode !== state.singlePageMode) {
+      const anchor = getActiveAnchorSpineIndex();
+      state.singlePageMode = nextSinglePageMode;
+      state.spreads = buildSpreads(getSpineLength(), state.singlePageMode);
+      state.currentSpread = clampSpread(findSpreadIndexForSpine(anchor));
+    }
     const { width, height } = updateViewportSize();
     state.rendition?.resize(width, height);
     void syncSpreadMode();
@@ -825,16 +892,50 @@ async function initReader(epubUrl, title) {
     PACKAGE_TIMEOUT_MS,
     "EPUB package took too long to initialize."
   );
+  try {
+    if (typeof state.book.coverUrl === "function") {
+      const coverUrl = await state.book.coverUrl();
+      state.coverImageSrc = String(coverUrl || "").trim();
+    } else {
+      state.coverImageSrc = "";
+    }
+  } catch (_error) {
+    state.coverImageSrc = "";
+  }
 
   const attachRenditionEvents = (rendition) => {
     rendition.on("relocated", (location) => {
       const index = Number(location?.start?.index);
+      if (state.initializingCover && !state.hasUserNavigated) {
+        state.currentSpread = 0;
+        state.coverSessionActive = true;
+        if (state.activeSpreadMode !== "none") {
+          state.activeSpreadMode = "none";
+          state.rendition?.spread("none");
+        }
+        state.currentSpineIndex = 0;
+        state.currentCfi = String(location?.start?.cfi || "").trim();
+        updatePageIndicator(location);
+        updatePagerState();
+        setReaderLoading(false);
+        requestAnimationFrame(() => {
+          applyZoom();
+          normalizeSpreadSeam();
+          void renderCoverCanvasIfNeeded();
+        });
+        return;
+      }
       if (Number.isFinite(index) && index >= 0) {
         state.currentSpineIndex = index;
+        if (state.hasUserNavigated) {
+          state.currentSpread = clampSpread(findSpreadIndexForSpine(index));
+        }
+      }
+      if (state.hasUserNavigated) {
+        state.coverSessionActive = state.currentSpread === 0;
       }
       state.currentCfi = String(location?.start?.cfi || "").trim();
       updatePageIndicator(location);
-      void syncSpreadMode();
       updatePagerState();
       setReaderLoading(false);
       requestAnimationFrame(() => {
@@ -870,7 +971,15 @@ async function initReader(epubUrl, title) {
     const firstSpineItem = state.book?.spine?.get?.(0) || state.book?.spine?.first?.();
     const firstTarget = String(firstSpineItem?.href || "").trim() || undefined;
     state.currentSpineIndex = 0;
+    state.spreads = buildSpreads(getSpineLength(), state.singlePageMode);
+    state.currentSpread = 0;
     state.activeSpreadMode = "";
+    state.coverImageSrc = String(state.coverImageSrc || "").trim();
+    state.coverSessionActive = true;
+    state.initializingCover = true;
+    state.hasUserNavigated = false;
+    state.correctingCoverRelocation = false;
+    state.syncingSpread = false;
     setReaderLoading(true, "Rendering pages...");
     await withTimeout(
       state.rendition.display(firstTarget),
@@ -888,13 +997,9 @@ async function initReader(epubUrl, title) {
     await renderWithOptions(FALLBACK_RENDER_OPTIONS);
   }
 
-  try {
-    await state.book.ready;
-    await state.book.locations.generate(1000);
-    state.locationReady = true;
-  } catch (_error) {
-    state.locationReady = false;
-  }
+  // Intentionally skip locations.generate() on initial load.
+  // It can trigger late relocations that split cover/startup spread state.
+  state.locationReady = false;
 
   document.title = `${title} - BluPetal`;
   applyZoom();
