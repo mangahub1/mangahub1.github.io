@@ -6,6 +6,7 @@ const DOWNLOAD_TIMEOUT_MS = 30000;
 const PACKAGE_TIMEOUT_MS = 15000;
 const SINGLE_PAGE_BREAKPOINT = 900;
 const EPUB_BASE_SCALE = 1.0;
+const TAP_MAX_MOVE_PX = 12;
 const PRIMARY_RENDER_OPTIONS = {
   width: "100%",
   height: "100%",
@@ -41,6 +42,7 @@ const state = {
   initializingCover: true,
   hasUserNavigated: false,
   correctingCoverRelocation: false,
+  navigationInProgress: false,
 };
 
 const elements = {
@@ -62,7 +64,16 @@ const elements = {
   directionToggle: document.getElementById("directionToggle"),
   directionValue: document.getElementById("directionValue"),
   bookmarkToggle: document.getElementById("bookmarkToggle"),
+  spreadContainer: document.getElementById("spreadContainer"),
 };
+
+function syncAppViewportHeight() {
+  const viewportHeight =
+    window.visualViewport?.height && Number.isFinite(window.visualViewport.height)
+      ? window.visualViewport.height
+      : window.innerHeight;
+  document.documentElement.style.setProperty("--app-vh", `${viewportHeight * 0.01}px`);
+}
 
 const coverCanvasState = {
   canvas: null,
@@ -107,6 +118,11 @@ function hideCoverCanvas() {
   coverCanvasState.canvas.classList.add("hidden");
   coverCanvasState.canvas.style.display = "none";
   coverCanvasState.visible = false;
+  if (elements.leftPanel) {
+    elements.leftPanel.style.display = "";
+    elements.leftPanel.style.alignItems = "";
+    elements.leftPanel.style.justifyContent = "";
+  }
   elements.epubViewport.classList.remove("hidden");
 }
 
@@ -209,6 +225,9 @@ async function renderCoverCanvasIfNeeded() {
     const view = container?.querySelector?.(".epub-view");
     const iframe = view?.querySelector?.("iframe");
     src = extractCoverImageSource(iframe);
+    if (src) {
+      state.coverImageSrc = src;
+    }
   }
   if (!src) {
     if (coverCanvasState.visible) return;
@@ -224,9 +243,28 @@ async function renderCoverCanvasIfNeeded() {
     const bounds = findContentBounds(image);
     const canvas = ensureCoverCanvas();
     const viewportRect = elements.epubViewport.getBoundingClientRect();
+    const panelRect = elements.leftPanel?.getBoundingClientRect?.();
+    const viewportWidth =
+      viewportRect.width > 24
+        ? viewportRect.width
+        : panelRect && panelRect.width > 24
+          ? panelRect.width
+          : elements.canvasStage?.getBoundingClientRect?.().width || 0;
+    const viewportHeight =
+      viewportRect.height > 24
+        ? viewportRect.height
+        : panelRect && panelRect.height > 24
+          ? panelRect.height
+          : elements.canvasStage?.getBoundingClientRect?.().height || 0;
+
+    // Avoid overwriting a good cover render with a 1x1 canvas when hidden.
+    if (viewportWidth <= 24 || viewportHeight <= 24) {
+      return;
+    }
+
     const fitScale = Math.min(
-      viewportRect.width / bounds.w,
-      viewportRect.height / bounds.h
+      viewportWidth / bounds.w,
+      viewportHeight / bounds.h
     );
     const displayW = Math.max(1, Math.floor(bounds.w * fitScale));
     const displayH = Math.max(1, Math.floor(bounds.h * fitScale));
@@ -299,143 +337,51 @@ function looksLikeDualPageInSingleIframe(iframe) {
 function normalizeSpreadSeam() {
   const container = elements.epubViewport?.querySelector?.(".epub-container");
   if (!(container instanceof HTMLElement)) return;
+  const isMobileSingle = state.singlePageMode && window.innerWidth < SINGLE_PAGE_BREAKPOINT;
 
-  const isSingle = elements.epubViewport.classList.contains("is-single-page");
-  const allViews = Array.from(container.querySelectorAll(".epub-view"));
-  if (!allViews.length) return;
-
-  const usableViews = allViews.filter((view) => view instanceof HTMLElement && !isBlankEpubView(view));
-  if (!usableViews.length) return;
+  const views = Array.from(container.querySelectorAll(".epub-view")).filter(
+    (view) => view instanceof HTMLElement
+  );
 
   container.style.gap = "0px";
   container.style.columnGap = "0px";
+  container.style.rowGap = "0px";
   container.style.margin = "0";
   container.style.padding = "0";
-
-  if (isSingle || usableViews.length <= 1) {
-    container.style.position = "";
-    container.style.display = "flex";
-    container.style.justifyContent = "center";
-    container.style.alignItems = "center";
-    container.style.width = "100%";
-    container.style.height = "100%";
-    const primaryView = usableViews[0] instanceof HTMLElement ? usableViews[0] : null;
-    for (const view of allViews) {
-      if (!(view instanceof HTMLElement)) continue;
-      view.style.position = "";
-      view.style.flex = "";
-      view.style.left = "";
-      view.style.right = "";
-      view.style.top = "";
-      view.style.bottom = "";
-      view.style.width = "";
-      view.style.maxWidth = "";
-      view.style.minWidth = "";
-      view.style.height = "";
-      view.style.display = view === primaryView ? "flex" : "none";
-      view.style.alignItems = "center";
-      view.style.justifyContent = "center";
-      view.style.margin = "0";
-      view.style.padding = "0";
-      view.style.overflow = "visible";
-      if (view === primaryView) {
-        view.style.flex = "0 0 100%";
-        view.style.width = "100%";
-        view.style.maxWidth = "100%";
-        view.style.minWidth = "100%";
-        view.style.height = "100%";
-      }
-      const iframe = view.querySelector("iframe");
-      if (iframe instanceof HTMLElement) {
-        // Clear two-page constraints so cover/page-1 can render at natural fit.
-        if (view === primaryView) {
-          iframe.style.width = "100%";
-          iframe.style.height = "100%";
-          iframe.style.maxWidth = "100%";
-          iframe.style.maxHeight = "100%";
-          iframe.style.minWidth = "100%";
-          iframe.style.marginLeft = "0";
-          iframe.style.transform = "none";
-          iframe.style.transformOrigin = "";
-          if (state.currentSpineIndex === 0 || looksLikeDualPageInSingleIframe(iframe)) {
-            try {
-              const doc = iframe.contentDocument;
-              if (doc) {
-                let styleEl = doc.getElementById("cover-single-page-fix");
-                if (!styleEl) {
-                  styleEl = doc.createElement("style");
-                  styleEl.id = "cover-single-page-fix";
-                  doc.head?.appendChild(styleEl);
-                }
-                styleEl.textContent =
-                  "html,body{margin:0!important;padding:0!important;width:100%!important;max-width:100%!important;overflow:hidden!important;}img,svg{display:block!important;max-width:100%!important;height:auto!important;}";
-              }
-            } catch (_error) {
-              // Ignore inaccessible iframe documents.
-            }
-            // Crop synthetic spread to one page at a predictable scale.
-            iframe.style.setProperty("width", "100%", "important");
-            iframe.style.setProperty("max-width", "100%", "important");
-            iframe.style.setProperty("min-width", "100%", "important");
-            iframe.style.setProperty("margin-left", "0", "important");
-            iframe.style.setProperty("transform", "translateX(0)", "important");
-
-            // Keep cover panel full-width in single-page mode.
-            view.style.setProperty("flex", "0 0 100%", "important");
-            view.style.setProperty("width", "100%", "important");
-            view.style.setProperty("max-width", "100%", "important");
-            view.style.setProperty("min-width", "100%", "important");
-          }
-        } else {
-          iframe.style.width = "";
-          iframe.style.height = "";
-          iframe.style.maxWidth = "";
-          iframe.style.maxHeight = "";
-          iframe.style.minWidth = "";
-          iframe.style.marginLeft = "";
-          iframe.style.transform = "";
-          iframe.style.transformOrigin = "";
-        }
-      }
-    }
-    return;
-  }
-
-  const leftView = usableViews[0];
-  const rightView = usableViews[1];
-
-  container.style.position = "";
-  container.style.display = "flex";
+  container.style.height = "100%";
+  container.style.minHeight = "100%";
   container.style.justifyContent = "center";
   container.style.alignItems = "stretch";
-
-  for (const view of allViews) {
+  for (const view of views) {
     if (!(view instanceof HTMLElement)) continue;
+    view.style.display = "block";
     view.style.margin = "0";
+    view.style.marginLeft = "0";
+    view.style.marginRight = "0";
     view.style.padding = "0";
-    view.style.overflow = "hidden";
-    if (view !== leftView && view !== rightView) {
-      view.style.display = "none";
-      continue;
-    }
-    view.style.display = "flex";
-    view.style.position = "";
-    view.style.left = "";
     view.style.height = "100%";
-    view.style.flex = "0 0 50%";
-    view.style.width = "50%";
-    view.style.maxWidth = "50%";
-    view.style.minWidth = "50%";
-    view.style.alignItems = "center";
+    view.style.minHeight = "100%";
+    view.style.overflow = "hidden";
+    view.style.background = isMobileSingle ? "transparent" : "#fff";
+    view.style.borderLeft = "";
     const iframe = view.querySelector("iframe");
     if (iframe instanceof HTMLElement) {
+      iframe.style.margin = "0";
+      iframe.style.padding = "0";
+      iframe.style.border = "0";
+      iframe.style.display = "block";
       iframe.style.width = "100%";
       iframe.style.height = "100%";
-      iframe.style.display = "block";
+      iframe.style.background = isMobileSingle ? "transparent" : "#fff";
     }
   }
-  leftView.style.justifyContent = "flex-end";
-  rightView.style.justifyContent = "flex-start";
+
+  // In desktop spread mode, collapse any residual seam gap and draw a thin spine.
+  if (!state.singlePageMode && views.length >= 2) {
+    const second = views[1];
+    second.style.marginLeft = "-1px";
+    second.style.borderLeft = "1px solid rgba(20, 24, 34, 0.35)";
+  }
 }
 
 function registerContentSeamOverrides(rendition) {
@@ -446,19 +392,96 @@ function registerContentSeamOverrides(rendition) {
         html: {
           margin: "0 !important",
           padding: "0 !important",
-          "background-color": "#fff !important",
+          "background-color": "transparent !important",
         },
         body: {
           margin: "0 !important",
           padding: "0 !important",
-          "background-color": "#fff !important",
+          "background-color": "transparent !important",
         },
         "img,svg,canvas": {
           margin: "0 !important",
           padding: "0 !important",
           display: "block !important",
         },
+        ".main,svg": {
+          "background-color": "transparent !important",
+        },
       });
+
+      const doc = contents?.document;
+      if (doc) {
+        const applyMobileInlineCentering = () => {
+          const isMobileSingle = window.innerWidth < SINGLE_PAGE_BREAKPOINT && state.singlePageMode;
+          let styleEl = doc.getElementById("mobile-inline-centering-style");
+          if (!styleEl) {
+            styleEl = doc.createElement("style");
+            styleEl.id = "mobile-inline-centering-style";
+            doc.head?.appendChild(styleEl);
+          }
+          styleEl.textContent = isMobileSingle
+            ? `
+html, body {
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: transparent !important;
+}
+body {
+  transform: none !important;
+  transform-origin: center center !important;
+  display: grid !important;
+  place-items: center !important;
+}
+.main {
+  width: 100% !important;
+  height: 100% !important;
+  display: grid !important;
+  place-items: center !important;
+  background: transparent !important;
+}
+svg, img, canvas {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+`
+            : "";
+        };
+
+        applyMobileInlineCentering();
+
+        let pointerDown = null;
+
+        doc.addEventListener("pointerdown", (event) => {
+          if (event.pointerType === "mouse" && event.button !== 0) return;
+          pointerDown = {
+            x: event.clientX,
+            y: event.clientY,
+            pointerId: event.pointerId,
+          };
+        });
+
+        doc.addEventListener("pointerup", (event) => {
+          if (!pointerDown || pointerDown.pointerId !== event.pointerId) return;
+          const movedX = Math.abs(event.clientX - pointerDown.x);
+          const movedY = Math.abs(event.clientY - pointerDown.y);
+          pointerDown = null;
+          if (movedX > TAP_MAX_MOVE_PX || movedY > TAP_MAX_MOVE_PX) return;
+          const target = event.target instanceof Element ? event.target : null;
+          if (target?.closest("a,button,input,textarea,select,label")) return;
+          if (elements.readerView.classList.contains("is-loading")) return;
+          void goNext();
+        });
+
+        doc.addEventListener("pointercancel", () => {
+          pointerDown = null;
+        });
+      }
     } catch (_error) {
       // Ignore malformed documents that reject rule injection.
     }
@@ -479,6 +502,24 @@ function updateViewportSize() {
   elements.epubViewport.style.width = `${width}px`;
   elements.epubViewport.style.height = `${height}px`;
   return { width, height };
+}
+
+function scheduleRenditionReflow() {
+  if (!state.rendition) return;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const { width, height } = updateViewportSize();
+      state.rendition?.resize(width, height);
+    });
+  });
+}
+
+function scheduleFixedLayoutCentering() {
+  void 0;
+}
+
+function centerFixedLayoutFrames() {
+  void 0;
 }
 
 function getSpineLength() {
@@ -594,14 +635,33 @@ function updatePagerState() {
   elements.pageIndicator.textContent = `${spreadDisplay} / ${spreadTotal}`;
 }
 
+function ensureSinglePageModeMatchesViewport() {
+  const nextSinglePageMode = window.innerWidth < SINGLE_PAGE_BREAKPOINT;
+  if (nextSinglePageMode === state.singlePageMode) {
+    return;
+  }
+
+  const anchor = getActiveAnchorSpineIndex();
+  state.singlePageMode = nextSinglePageMode;
+  state.spreads = buildSpreads(getSpineLength(), state.singlePageMode);
+  state.currentSpread = clampSpread(findSpreadIndexForSpine(anchor));
+}
+
 async function syncSpreadMode() {
   if (!state.rendition || state.syncingSpread) return;
+  ensureSinglePageModeMatchesViewport();
   const spread = getActiveSpread();
   const left = Number.isInteger(spread.pages?.[0]) ? spread.pages[0] : 0;
   const right = Number.isInteger(spread.pages?.[1]) ? spread.pages[1] : null;
+  const isCoverSpread = state.currentSpread === 0;
   const nextMode = right === null ? "none" : "auto";
   elements.epubViewport.classList.toggle("is-single-page", nextMode === "none");
+  elements.spreadContainer?.classList.toggle("spread-single", nextMode === "none");
+  elements.spreadContainer?.classList.toggle("spread-double", nextMode !== "none");
   state.coverSessionActive = state.currentSpread === 0;
+  if (state.coverSessionActive && coverCanvasState.canvas instanceof HTMLCanvasElement) {
+    showCoverCanvas();
+  }
 
   const applySpreadMode = state.activeSpreadMode !== nextMode;
   const current = getCurrentSpineIndex();
@@ -613,6 +673,15 @@ async function syncSpreadMode() {
       state.activeSpreadMode = nextMode;
       state.rendition.spread(nextMode);
     }
+
+    if (isCoverSpread) {
+      // Cover is driven by rendered cover canvas, not by spine relocation.
+      // Avoid display() here to prevent late jumps to page 1.
+      state.currentSpineIndex = 0;
+      void renderCoverCanvasIfNeeded();
+      return;
+    }
+
     if (shouldDisplayTarget) {
       const displayIndex = left;
       const target = String(
@@ -624,6 +693,8 @@ async function syncSpreadMode() {
           await new Promise((resolve) => requestAnimationFrame(resolve));
           await state.rendition.display(target);
         }
+        const { width, height } = updateViewportSize();
+        state.rendition.resize(width, height);
         state.currentSpineIndex = displayIndex;
       }
     }
@@ -709,7 +780,7 @@ function applyZoom() {
   const scale = Math.max(0.4, Math.min(2.5, (state.zoom / 100) * EPUB_BASE_SCALE));
   const container = elements.epubViewport.querySelector(".epub-container");
   if (container instanceof HTMLElement) {
-    container.style.transformOrigin = "center top";
+    container.style.transformOrigin = "center center";
     container.style.transform = `scale(${scale})`;
     container.style.width = "";
     container.style.height = "";
@@ -754,8 +825,13 @@ async function goNext() {
     state.hasUserNavigated = true;
     state.initializingCover = false;
     state.currentSpread = nextSpread;
+    if (nextSpread > 0) {
+      state.navigationInProgress = true;
+      hideCoverCanvas();
+    }
     await syncSpreadMode();
     updatePagerState();
+    scheduleFixedLayoutCentering();
   }
 }
 
@@ -766,8 +842,26 @@ async function goPrev() {
     state.hasUserNavigated = true;
     state.initializingCover = false;
     state.currentSpread = prevSpread;
+    if (prevSpread === 0) {
+      state.navigationInProgress = false;
+      state.coverSessionActive = true;
+      state.activeSpreadMode = "none";
+      try {
+        state.rendition.spread("none");
+      } catch (_error) {
+        // Ignore spread-mode errors from inconsistent epub.js builds.
+      }
+      if (coverCanvasState.canvas instanceof HTMLCanvasElement) {
+        showCoverCanvas();
+      }
+      await renderCoverCanvasIfNeeded();
+      updatePagerState();
+      return;
+    }
+    state.navigationInProgress = true;
     await syncSpreadMode();
     updatePagerState();
+    scheduleFixedLayoutCentering();
   }
 }
 
@@ -823,8 +917,33 @@ async function onKeyboard(event) {
 }
 
 function wireEvents() {
+  let stagePointerDown = null;
+
   elements.leftNav.addEventListener("click", () => void onLeftNav());
   elements.rightNav.addEventListener("click", () => void onRightNav());
+
+  elements.canvasStage?.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    stagePointerDown = {
+      x: event.clientX,
+      y: event.clientY,
+      pointerId: event.pointerId,
+    };
+  });
+
+  elements.canvasStage?.addEventListener("pointerup", (event) => {
+    if (!stagePointerDown || stagePointerDown.pointerId !== event.pointerId) return;
+    const movedX = Math.abs(event.clientX - stagePointerDown.x);
+    const movedY = Math.abs(event.clientY - stagePointerDown.y);
+    stagePointerDown = null;
+    if (movedX > TAP_MAX_MOVE_PX || movedY > TAP_MAX_MOVE_PX) return;
+    if (elements.readerView.classList.contains("is-loading")) return;
+    void goNext();
+  });
+
+  elements.canvasStage?.addEventListener("pointercancel", () => {
+    stagePointerDown = null;
+  });
 
   elements.zoomIn.addEventListener("click", () => {
     state.zoom = Math.min(MAX_ZOOM, state.zoom + ZOOM_STEP);
@@ -858,6 +977,7 @@ function wireEvents() {
   });
 
   window.addEventListener("resize", () => {
+    syncAppViewportHeight();
     const nextSinglePageMode = window.innerWidth < SINGLE_PAGE_BREAKPOINT;
     if (nextSinglePageMode !== state.singlePageMode) {
       const anchor = getActiveAnchorSpineIndex();
@@ -871,6 +991,8 @@ function wireEvents() {
     updatePagerState();
     void renderCoverCanvasIfNeeded();
   });
+
+  window.visualViewport?.addEventListener("resize", syncAppViewportHeight);
 }
 
 async function initReader(epubUrl, title) {
@@ -904,6 +1026,17 @@ async function initReader(epubUrl, title) {
   }
 
   const attachRenditionEvents = (rendition) => {
+    rendition.on("click", (event) => {
+      const target = event?.target instanceof Element ? event.target : null;
+      if (target?.closest("a,button,input,textarea,select,label")) {
+        return;
+      }
+      if (elements.readerView.classList.contains("is-loading")) {
+        return;
+      }
+      void goNext();
+    });
+
     rendition.on("relocated", (location) => {
       const index = Number(location?.start?.index);
       if (state.initializingCover && !state.hasUserNavigated) {
@@ -917,17 +1050,41 @@ async function initReader(epubUrl, title) {
         state.currentCfi = String(location?.start?.cfi || "").trim();
         updatePageIndicator(location);
         updatePagerState();
+        applyZoom();
+        normalizeSpreadSeam();
+        if (!state.navigationInProgress) {
+          centerFixedLayoutFrames();
+        }
         setReaderLoading(false);
-        requestAnimationFrame(() => {
-          applyZoom();
-          normalizeSpreadSeam();
-          void renderCoverCanvasIfNeeded();
-        });
+        void renderCoverCanvasIfNeeded();
         return;
       }
+
+      // When user navigates back to cover, keep cover state stable and ignore
+      // late relocation indices that can point to page 1 in the same section.
+      if (state.coverSessionActive && state.currentSpread === 0 && state.hasUserNavigated) {
+        if (coverCanvasState.canvas instanceof HTMLCanvasElement) {
+          showCoverCanvas();
+        }
+        state.navigationInProgress = false;
+        state.currentSpread = 0;
+        state.coverSessionActive = true;
+        state.currentSpineIndex = 0;
+        state.currentCfi = String(location?.start?.cfi || "").trim();
+        updatePagerState();
+        applyZoom();
+        normalizeSpreadSeam();
+        if (!state.navigationInProgress) {
+          centerFixedLayoutFrames();
+        }
+        setReaderLoading(false);
+        void renderCoverCanvasIfNeeded();
+        return;
+      }
+
       if (Number.isFinite(index) && index >= 0) {
         state.currentSpineIndex = index;
-        if (state.hasUserNavigated) {
+        if (state.hasUserNavigated && state.currentSpread !== 0) {
           state.currentSpread = clampSpread(findSpreadIndexForSpine(index));
         }
       }
@@ -937,20 +1094,18 @@ async function initReader(epubUrl, title) {
       state.currentCfi = String(location?.start?.cfi || "").trim();
       updatePageIndicator(location);
       updatePagerState();
+      applyZoom();
+      normalizeSpreadSeam();
+      state.navigationInProgress = false;
       setReaderLoading(false);
-      requestAnimationFrame(() => {
-        applyZoom();
-        normalizeSpreadSeam();
-        void renderCoverCanvasIfNeeded();
-      });
+      void renderCoverCanvasIfNeeded();
     });
     rendition.on("rendered", () => {
+      applyZoom();
+      normalizeSpreadSeam();
+      state.navigationInProgress = false;
       setReaderLoading(false);
-      requestAnimationFrame(() => {
-        applyZoom();
-        normalizeSpreadSeam();
-        void renderCoverCanvasIfNeeded();
-      });
+      void renderCoverCanvasIfNeeded();
     });
     rendition.on("displayError", (_section, error) => {
       setReaderLoading(false);
@@ -987,6 +1142,7 @@ async function initReader(epubUrl, title) {
       "EPUB took too long to render."
     );
     state.rendition.resize(width, height);
+    scheduleRenditionReflow();
     setReaderLoading(false);
   };
 
@@ -1003,6 +1159,7 @@ async function initReader(epubUrl, title) {
 
   document.title = `${title} - BluPetal`;
   applyZoom();
+  scheduleRenditionReflow();
   updateDirectionUi();
   updateDirectionalLabels();
   updatePagerState();
@@ -1010,6 +1167,7 @@ async function initReader(epubUrl, title) {
 }
 
 async function init() {
+  syncAppViewportHeight();
   wireEvents();
   updateZoomLabel();
   updateDirectionUi();

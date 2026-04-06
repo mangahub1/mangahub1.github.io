@@ -8,6 +8,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 const FALLBACK_COVER = "./content/manga/placeholder.svg";
 const SINGLE_PAGE_BREAKPOINT = 900;
 const MAX_ZOOM = 2;
+const TAP_MAX_MOVE_PX = 12;
+const TAP_CLICK_DEDUP_MS = 420;
 
 function endpointLooksConfigured(value) {
   return String(value || "").trim().startsWith("https://");
@@ -107,6 +109,14 @@ const elements = {
   librarySearchCount: document.getElementById("librarySearchCount"),
   librarySearchResults: document.getElementById("librarySearchResults"),
 };
+
+function syncAppViewportHeight() {
+  const viewportHeight =
+    window.visualViewport?.height && Number.isFinite(window.visualViewport.height)
+      ? window.visualViewport.height
+      : window.innerHeight;
+  document.documentElement.style.setProperty("--app-vh", `${viewportHeight * 0.01}px`);
+}
 
 function wireAdminMenu() {
   const session = getAuthSession();
@@ -1176,21 +1186,6 @@ async function renderSpread(index) {
   elements.spread.classList.toggle("spread-single", isSingle);
   elements.spread.classList.toggle("spread-double", !isSingle);
 
-  elements.spread.style.display = "flex";
-  elements.spread.style.alignItems = "center";
-  elements.spread.style.justifyContent = "center";
-  elements.spread.style.gap = "0px";
-
-  elements.leftPanel.style.display = "flex";
-  elements.leftPanel.style.alignItems = "center";
-  elements.leftPanel.style.justifyContent = "center";
-  elements.leftPanel.style.flex = "0 0 auto";
-
-  elements.rightPanel.style.display = "flex";
-  elements.rightPanel.style.alignItems = "center";
-  elements.rightPanel.style.justifyContent = "center";
-  elements.rightPanel.style.flex = "0 0 auto";
-
   if (spread.type === "end") {
     renderEndPage("left");
     elements.rightPanel.classList.add("hidden");
@@ -1313,6 +1308,9 @@ function wireEvents() {
     return;
   }
 
+  let stagePointerDown = null;
+  let lastStagePointerNavigateAt = 0;
+
   elements.leftNav.addEventListener("click", () => {
     if (state.direction === "ltr") {
       goPrev();
@@ -1327,6 +1325,57 @@ function wireEvents() {
     } else {
       goPrev();
     }
+  });
+
+  elements.stage?.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) {
+      return;
+    }
+    stagePointerDown = {
+      x: event.clientX,
+      y: event.clientY,
+      pointerId: event.pointerId,
+    };
+  });
+
+  elements.stage?.addEventListener("pointerup", (event) => {
+    if (!stagePointerDown || stagePointerDown.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const movedX = Math.abs(event.clientX - stagePointerDown.x);
+    const movedY = Math.abs(event.clientY - stagePointerDown.y);
+    stagePointerDown = null;
+
+    if (movedX > TAP_MAX_MOVE_PX || movedY > TAP_MAX_MOVE_PX) {
+      return;
+    }
+
+    if (elements.readerView.classList.contains("hidden") || state.awaitingFirstRender) {
+      return;
+    }
+
+    lastStagePointerNavigateAt = Date.now();
+    goNext();
+  });
+
+  elements.stage?.addEventListener("pointercancel", () => {
+    stagePointerDown = null;
+  });
+
+  elements.stage?.addEventListener("click", (event) => {
+    if (elements.readerView.classList.contains("hidden") || state.awaitingFirstRender) {
+      return;
+    }
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("button,a,input,select,textarea,label")) {
+      return;
+    }
+    const sincePointerNav = Date.now() - lastStagePointerNavigateAt;
+    if (sincePointerNav >= 0 && sincePointerNav < TAP_CLICK_DEDUP_MS) {
+      return;
+    }
+    goNext();
   });
 
   elements.zoomIn.addEventListener("click", () => {
@@ -1359,6 +1408,7 @@ function wireEvents() {
   window.addEventListener("keydown", onKeyboard);
 
   window.addEventListener("resize", () => {
+    syncAppViewportHeight();
     if (elements.readerView.classList.contains("hidden")) {
       return;
     }
@@ -1383,6 +1433,8 @@ function wireEvents() {
     }
     void openMangaById(mangaId, false, fallbackItem, contentKey);
   });
+
+  window.visualViewport?.addEventListener("resize", syncAppViewportHeight);
 
   elements.openSearchView?.addEventListener("click", () => {
     setLibraryViewMode("search");
@@ -1661,6 +1713,7 @@ async function openMangaById(
 }
 
 async function init() {
+  syncAppViewportHeight();
   wireAdminMenu();
   wireAccountIdentity();
   wireEvents();

@@ -513,7 +513,8 @@ body {
 }
 
 .reader-view {
-  height: 100vh;
+  height: calc(var(--app-vh, 1vh) * 100);
+  min-height: 100svh;
   position: relative;
   overflow: hidden;
   display: grid;
@@ -711,14 +712,16 @@ button:disabled {
 
 .reader-shell {
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto 1fr;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
   background: #24262c;
   overflow: hidden;
 }
 
 .canvas-stage {
   position: relative;
+  flex: 1 1 auto;
   min-height: 0;
   height: 100%;
   background: #24262c;
@@ -790,20 +793,20 @@ button:disabled {
 
 .spread {
   height: 100%;
-  display: grid;
+  display: flex;
   align-items: center;
-  justify-items: stretch;
+  justify-content: center;
   gap: 0;
   min-height: 0;
 }
 
 .spread-double {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  display: flex;
 }
 
 .spread-single {
-  grid-template-columns: minmax(0, 1fr);
-  justify-items: center;
+  display: flex;
+  justify-content: center;
 }
 
 .page-panel {
@@ -826,10 +829,16 @@ button:disabled {
 
 .spread-double #leftCanvas {
   justify-self: end;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  box-shadow: inset -1px 0 0 rgba(20, 24, 34, 0.3);
 }
 
 .spread-double #rightCanvas {
   justify-self: start;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  box-shadow: inset 1px 0 0 rgba(20, 24, 34, 0.3);
 }
 
 canvas {
@@ -850,7 +859,10 @@ canvas {
   grid-template-columns: minmax(120px, 180px) auto minmax(120px, 180px);
   width: 100%;
   background: #24262c;
-  padding: 0.45rem 0.75rem 0.55rem;
+  padding: 0.45rem 0.75rem calc(0.55rem + env(safe-area-inset-bottom, 0px));
+  position: sticky;
+  bottom: 0;
+  z-index: 8;
 }
 
 .pager button {
@@ -959,6 +971,27 @@ canvas {
     align-items: flex-start;
   }
 
+  #canvasStage {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
+  #spreadContainer {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: auto 0 !important;
+  }
+
+  #spreadContainer .page-panel {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
   .topbar {
     flex-wrap: wrap;
     justify-content: flex-start;
@@ -981,6 +1014,7 @@ canvas {
     gap: 0.45rem;
     padding-left: 0.5rem;
     padding-right: 0.5rem;
+    padding-bottom: calc(0.55rem + env(safe-area-inset-bottom, 0px));
   }
 
   #leftNav,
