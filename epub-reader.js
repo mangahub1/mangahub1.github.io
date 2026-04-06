@@ -7,6 +7,8 @@ const PACKAGE_TIMEOUT_MS = 15000;
 const SINGLE_PAGE_BREAKPOINT = 900;
 const EPUB_BASE_SCALE = 1.0;
 const TAP_MAX_MOVE_PX = 12;
+const SWIPE_MIN_DISTANCE_PX = 48;
+const SWIPE_MAX_OFF_AXIS_PX = 72;
 const PRIMARY_RENDER_OPTIONS = {
   width: "100%",
   height: "100%",
@@ -393,11 +395,15 @@ function registerContentSeamOverrides(rendition) {
           margin: "0 !important",
           padding: "0 !important",
           "background-color": "transparent !important",
+          "overscroll-behavior-x": "none !important",
+          "touch-action": "pan-y pinch-zoom !important",
         },
         body: {
           margin: "0 !important",
           padding: "0 !important",
           "background-color": "transparent !important",
+          "overscroll-behavior-x": "none !important",
+          "touch-action": "pan-y pinch-zoom !important",
         },
         "img,svg,canvas": {
           margin: "0 !important",
@@ -411,6 +417,15 @@ function registerContentSeamOverrides(rendition) {
 
       const doc = contents?.document;
       if (doc) {
+        if (doc.documentElement instanceof HTMLElement) {
+          doc.documentElement.style.overscrollBehaviorX = "none";
+          doc.documentElement.style.touchAction = "pan-y pinch-zoom";
+        }
+        if (doc.body instanceof HTMLElement) {
+          doc.body.style.overscrollBehaviorX = "none";
+          doc.body.style.touchAction = "pan-y pinch-zoom";
+        }
+
         const applyMobileInlineCentering = () => {
           const isMobileSingle = window.innerWidth < SINGLE_PAGE_BREAKPOINT && state.singlePageMode;
           let styleEl = doc.getElementById("mobile-inline-centering-style");
@@ -463,14 +478,23 @@ svg, img, canvas {
             x: event.clientX,
             y: event.clientY,
             pointerId: event.pointerId,
+            pointerType: event.pointerType,
           };
         });
 
         doc.addEventListener("pointerup", (event) => {
           if (!pointerDown || pointerDown.pointerId !== event.pointerId) return;
-          const movedX = Math.abs(event.clientX - pointerDown.x);
-          const movedY = Math.abs(event.clientY - pointerDown.y);
+          const deltaX = event.clientX - pointerDown.x;
+          const deltaY = event.clientY - pointerDown.y;
+          const movedX = Math.abs(deltaX);
+          const movedY = Math.abs(deltaY);
+          const pointerType = pointerDown.pointerType || event.pointerType;
           pointerDown = null;
+          const isSwipePointer = pointerType && pointerType !== "mouse";
+          if (isSwipePointer && movedX >= SWIPE_MIN_DISTANCE_PX && movedY <= SWIPE_MAX_OFF_AXIS_PX) {
+            void onStageHorizontalSwipe(deltaX);
+            return;
+          }
           if (movedX > TAP_MAX_MOVE_PX || movedY > TAP_MAX_MOVE_PX) return;
           const target = event.target instanceof Element ? event.target : null;
           if (target?.closest("a,button,input,textarea,select,label")) return;
@@ -865,6 +889,23 @@ async function goPrev() {
   }
 }
 
+async function onStageHorizontalSwipe(deltaX) {
+  if (deltaX < 0) {
+    if (state.direction === "rtl") {
+      await goNext();
+    } else {
+      await goPrev();
+    }
+    return;
+  }
+
+  if (state.direction === "rtl") {
+    await goPrev();
+  } else {
+    await goNext();
+  }
+}
+
 async function onLeftNav() {
   if (state.direction === "ltr") {
     await goPrev();
@@ -928,14 +969,23 @@ function wireEvents() {
       x: event.clientX,
       y: event.clientY,
       pointerId: event.pointerId,
+      pointerType: event.pointerType,
     };
   });
 
   elements.canvasStage?.addEventListener("pointerup", (event) => {
     if (!stagePointerDown || stagePointerDown.pointerId !== event.pointerId) return;
-    const movedX = Math.abs(event.clientX - stagePointerDown.x);
-    const movedY = Math.abs(event.clientY - stagePointerDown.y);
+    const deltaX = event.clientX - stagePointerDown.x;
+    const deltaY = event.clientY - stagePointerDown.y;
+    const movedX = Math.abs(deltaX);
+    const movedY = Math.abs(deltaY);
+    const pointerType = stagePointerDown.pointerType || event.pointerType;
     stagePointerDown = null;
+    const isSwipePointer = pointerType && pointerType !== "mouse";
+    if (isSwipePointer && movedX >= SWIPE_MIN_DISTANCE_PX && movedY <= SWIPE_MAX_OFF_AXIS_PX) {
+      void onStageHorizontalSwipe(deltaX);
+      return;
+    }
     if (movedX > TAP_MAX_MOVE_PX || movedY > TAP_MAX_MOVE_PX) return;
     if (elements.readerView.classList.contains("is-loading")) return;
     void goNext();

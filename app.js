@@ -10,6 +10,8 @@ const SINGLE_PAGE_BREAKPOINT = 900;
 const MAX_ZOOM = 2;
 const TAP_MAX_MOVE_PX = 12;
 const TAP_CLICK_DEDUP_MS = 420;
+const SWIPE_MIN_DISTANCE_PX = 48;
+const SWIPE_MAX_OFF_AXIS_PX = 72;
 
 function endpointLooksConfigured(value) {
   return String(value || "").trim().startsWith("https://");
@@ -1265,6 +1267,23 @@ function goPrev() {
   queueRender();
 }
 
+function onStageHorizontalSwipe(deltaX) {
+  if (deltaX < 0) {
+    if (state.direction === "rtl") {
+      goNext();
+    } else {
+      goPrev();
+    }
+    return;
+  }
+
+  if (state.direction === "rtl") {
+    goPrev();
+  } else {
+    goNext();
+  }
+}
+
 function onKeyboard(event) {
   if (elements.readerView.classList.contains("hidden")) {
     return;
@@ -1335,6 +1354,7 @@ function wireEvents() {
       x: event.clientX,
       y: event.clientY,
       pointerId: event.pointerId,
+      pointerType: event.pointerType,
     };
   });
 
@@ -1343,9 +1363,19 @@ function wireEvents() {
       return;
     }
 
-    const movedX = Math.abs(event.clientX - stagePointerDown.x);
-    const movedY = Math.abs(event.clientY - stagePointerDown.y);
+    const deltaX = event.clientX - stagePointerDown.x;
+    const deltaY = event.clientY - stagePointerDown.y;
+    const movedX = Math.abs(deltaX);
+    const movedY = Math.abs(deltaY);
+    const pointerType = stagePointerDown.pointerType || event.pointerType;
     stagePointerDown = null;
+
+    const isSwipePointer = pointerType && pointerType !== "mouse";
+    if (isSwipePointer && movedX >= SWIPE_MIN_DISTANCE_PX && movedY <= SWIPE_MAX_OFF_AXIS_PX) {
+      lastStagePointerNavigateAt = Date.now();
+      onStageHorizontalSwipe(deltaX);
+      return;
+    }
 
     if (movedX > TAP_MAX_MOVE_PX || movedY > TAP_MAX_MOVE_PX) {
       return;

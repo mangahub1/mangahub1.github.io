@@ -9,10 +9,14 @@
   <style>
     html, body {
       height: 100%;
+      overscroll-behavior-x: none;
+      touch-action: pan-y pinch-zoom;
     }
     #readerView {
       height: calc(var(--app-vh, 1vh) * 100);
       min-height: 100svh;
+      overscroll-behavior-x: none;
+      touch-action: pan-y pinch-zoom;
     }
     .reader-shell {
       height: 100%;
@@ -22,11 +26,15 @@
       height: 100%;
       min-height: 0;
       overflow: auto;
+      overscroll-behavior-x: contain;
+      touch-action: pan-y pinch-zoom;
     }
     #spreadContainer {
       height: 100%;
       align-items: center;
       justify-items: center;
+      overscroll-behavior-x: contain;
+      touch-action: pan-y pinch-zoom;
     }
     #leftPanel {
       height: 100%;
@@ -40,6 +48,8 @@
       border-radius: 0.25rem;
       overflow: hidden;
       display: block;
+      overscroll-behavior-x: contain;
+      touch-action: pan-y pinch-zoom;
     }
 
     @media (max-width: 860px) {

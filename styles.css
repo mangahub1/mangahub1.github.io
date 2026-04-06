@@ -517,6 +517,8 @@ body {
   min-height: 100svh;
   position: relative;
   overflow: hidden;
+  overscroll-behavior-x: none;
+  touch-action: pan-y pinch-zoom;
   display: grid;
   grid-template-rows: auto 1fr auto;
 }
@@ -727,6 +729,8 @@ button:disabled {
   background: #24262c;
   padding: 0.45rem 0.5rem 0.55rem;
   overflow: auto;
+  overscroll-behavior-x: contain;
+  touch-action: pan-y pinch-zoom;
 }
 
 .reader-loading {
@@ -798,6 +802,8 @@ button:disabled {
   justify-content: center;
   gap: 0;
   min-height: 0;
+  overscroll-behavior-x: contain;
+  touch-action: pan-y pinch-zoom;
 }
 
 .spread-double {
