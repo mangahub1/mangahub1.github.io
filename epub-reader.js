@@ -892,17 +892,17 @@ async function goPrev() {
 async function onStageHorizontalSwipe(deltaX) {
   if (deltaX < 0) {
     if (state.direction === "rtl") {
-      await goNext();
-    } else {
       await goPrev();
+    } else {
+      await goNext();
     }
     return;
   }
 
   if (state.direction === "rtl") {
-    await goPrev();
-  } else {
     await goNext();
+  } else {
+    await goPrev();
   }
 }
 

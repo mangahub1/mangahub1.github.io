@@ -1270,17 +1270,17 @@ function goPrev() {
 function onStageHorizontalSwipe(deltaX) {
   if (deltaX < 0) {
     if (state.direction === "rtl") {
-      goNext();
-    } else {
       goPrev();
+    } else {
+      goNext();
     }
     return;
   }
 
   if (state.direction === "rtl") {
-    goPrev();
-  } else {
     goNext();
+  } else {
+    goPrev();
   }
 }
 
