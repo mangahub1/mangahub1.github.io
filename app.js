@@ -33,6 +33,10 @@ function endpointFromMangaBase(pathname) {
 }
 
 const endpoint = {
+  mangaGet: String(appAuthzConfig?.getMangaEndpoint || "").trim() || endpointFromMangaBase("/manga"),
+  categoryGet:
+    String(appAuthzConfig?.getCategoryEndpoint || "").trim() || endpointFromMangaBase("/category"),
+  genreGet: String(appAuthzConfig?.getGenreEndpoint || "").trim() || endpointFromMangaBase("/genre"),
   featureCategoryGet:
     String(appAuthzConfig?.getFeatureCategoryEndpoint || "").trim() ||
     endpointFromMangaBase("/feature-category"),
@@ -57,12 +61,15 @@ const state = {
   contentItems: [],
   librarySections: [],
   availableGenres: [],
-  availableStatuses: [],
+  availableCategories: [],
+  searchResults: [],
+  searchLoading: false,
+  searchRequestSeq: 0,
   libraryViewMode: "home",
   searchQuery: "",
-  searchGenre: "",
-  searchCategory: "",
-  searchStatus: "",
+  searchGenreId: "",
+  searchCategoryId: "",
+  searchFeatureId: "",
   searchSort: "relevance",
   activeItem: null,
   eventsBound: false,
@@ -107,10 +114,11 @@ const elements = {
   librarySortSelect: document.getElementById("librarySortSelect"),
   libraryGenreSelect: document.getElementById("libraryGenreSelect"),
   libraryCategorySelect: document.getElementById("libraryCategorySelect"),
-  libraryStatusSelect: document.getElementById("libraryStatusSelect"),
+  libraryFeatureSelect: document.getElementById("libraryFeatureSelect"),
   librarySearchCount: document.getElementById("librarySearchCount"),
   librarySearchResults: document.getElementById("librarySearchResults"),
 };
+let searchRefreshTimer = 0;
 
 function syncAppViewportHeight() {
   const viewportHeight =
@@ -237,6 +245,25 @@ function normalizeCategory(category) {
     title: name,
     order: Number.isFinite(displayOrder) ? displayOrder : Number.MAX_SAFE_INTEGER,
   };
+}
+
+function normalizeLookupItem(item, idKey) {
+  const id = String(item?.[idKey] || "").trim();
+  const name = String(item?.name || "").trim();
+  if (!id) {
+    return null;
+  }
+  return { id, name: name || id };
+}
+
+function normalizeIdList(values) {
+  if (Array.isArray(values)) {
+    return values.map((value) => String(value || "").trim()).filter(Boolean);
+  }
+  if (values === null || values === undefined || values === "") {
+    return [];
+  }
+  return [String(values).trim()].filter(Boolean);
 }
 
 function titleCaseWords(value) {
@@ -382,8 +409,34 @@ function buildQueryPreviewItem(params) {
   };
 }
 
+function normalizeSearchMangaItem(item) {
+  const mangaId = String(item?.manga_id || "").trim();
+  const title = String(item?.title || "").trim();
+  if (!mangaId || !title) {
+    return null;
+  }
+  return {
+    id: mangaId,
+    mangaId,
+    itemType: "MANGA",
+    title,
+    cover: String(item?.cover_url || "").trim() || FALLBACK_COVER,
+    categoryIds: normalizeIdList(item?.category_ids),
+    genreIds: normalizeIdList(item?.genre_ids),
+  };
+}
+
 async function loadContent() {
   try {
+    if (!endpointLooksConfigured(endpoint.mangaGet)) {
+      throw new Error("Manga GET endpoint is not configured.");
+    }
+    if (!endpointLooksConfigured(endpoint.categoryGet)) {
+      throw new Error("Category GET endpoint is not configured.");
+    }
+    if (!endpointLooksConfigured(endpoint.genreGet)) {
+      throw new Error("Genre GET endpoint is not configured.");
+    }
     if (!endpointLooksConfigured(endpoint.featureCategoryGet)) {
       throw new Error("FeatureCategory GET endpoint is not configured.");
     }
@@ -402,18 +455,22 @@ async function loadContent() {
     }
 
     categories.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
-    const itemResponseList = await Promise.all(
-      categories.map(async (category) => {
-        const url = new URL(endpoint.featureCategoryItemGet);
-        url.searchParams.set("category_id", category.id);
-        const response = await requestJson(url.toString(), { method: "GET" });
-        const data = responseData(response);
-        const items = Array.isArray(data?.items)
-          ? data.items.map(normalizeCategoryItem).filter(Boolean)
-          : [];
-        return { categoryId: category.id, items };
-      })
-    );
+    const [categoryLookupResponse, genreLookupResponse, itemResponseList] = await Promise.all([
+      requestJson(endpoint.categoryGet, { method: "GET" }),
+      requestJson(endpoint.genreGet, { method: "GET" }),
+      Promise.all(
+        categories.map(async (category) => {
+          const url = new URL(endpoint.featureCategoryItemGet);
+          url.searchParams.set("category_id", category.id);
+          const response = await requestJson(url.toString(), { method: "GET" });
+          const data = responseData(response);
+          const items = Array.isArray(data?.items)
+            ? data.items.map(normalizeCategoryItem).filter(Boolean)
+            : [];
+          return { categoryId: category.id, items };
+        })
+      )
+    ]);
 
     const itemById = new Map();
     itemResponseList.forEach(({ categoryId, items }) => {
@@ -437,22 +494,24 @@ async function loadContent() {
 
     state.contentItems = contentItems;
     state.librarySections = categories.map((category) => ({ id: category.id, title: category.title }));
-    state.availableGenres = Array.from(
-      new Set(
-        contentItems.flatMap((item) =>
-          Array.isArray(item.genres) ? item.genres : []
-        )
-      )
-    ).sort((a, b) => a.localeCompare(b));
-    state.availableStatuses = Array.from(
-      new Set(contentItems.map((item) => inferItemStatus(item)))
-    ).sort((a, b) => a.localeCompare(b));
+    const categoryLookupData = responseData(categoryLookupResponse);
+    const genreLookupData = responseData(genreLookupResponse);
+    state.availableCategories = (Array.isArray(categoryLookupData?.items) ? categoryLookupData.items : [])
+      .map((item) => normalizeLookupItem(item, "category_id"))
+      .filter(Boolean)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    state.availableGenres = (Array.isArray(genreLookupData?.items) ? genreLookupData.items : [])
+      .map((item) => normalizeLookupItem(item, "genre_id"))
+      .filter(Boolean)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    await refreshSearchResults();
     clearLibraryError();
   } catch (error) {
     state.contentItems = [];
     state.librarySections = [];
     state.availableGenres = [];
-    state.availableStatuses = [];
+    state.availableCategories = [];
+    state.searchResults = [];
     showLibraryError(`Could not load library from API. ${error.message}`);
     console.error(error);
   }
@@ -559,10 +618,10 @@ function renderGroupedLibrary() {
     sectionAction.className = "library-section-action";
     sectionAction.textContent = "See All >";
     sectionAction.addEventListener("click", () => {
-      state.searchCategory = section.id === "all" ? "" : section.title;
+      state.searchFeatureId = section.id === "all" ? "" : section.id;
       state.searchQuery = "";
-      state.searchGenre = "";
-      state.searchStatus = "";
+      state.searchGenreId = "";
+      state.searchCategoryId = "";
       state.searchSort = "relevance";
       setLibraryViewMode("search");
     });
@@ -582,96 +641,79 @@ function renderGroupedLibrary() {
   elements.libraryGrid.appendChild(fragment);
 }
 
-function toNormalizedLower(value) {
-  return String(value || "").trim().toLowerCase();
+function sortSearchResults(items) {
+  const sorted = Array.isArray(items) ? [...items] : [];
+  if (state.searchSort === "title_asc") {
+    sorted.sort((left, right) => left.title.localeCompare(right.title));
+    return sorted;
+  }
+  if (state.searchSort === "title_desc") {
+    sorted.sort((left, right) => right.title.localeCompare(left.title));
+    return sorted;
+  }
+  return sorted;
 }
 
-function scoreItemRelevance(item, normalizedQuery, categoryTitle) {
-  if (!normalizedQuery) {
-    return 0;
-  }
-  let score = 0;
-  const title = toNormalizedLower(item.title);
-  const genres = (Array.isArray(item.genres) ? item.genres : []).map(toNormalizedLower);
-  const category = toNormalizedLower(categoryTitle);
-
-  if (title === normalizedQuery) {
-    score += 120;
-  } else if (title.startsWith(normalizedQuery)) {
-    score += 95;
-  } else if (title.includes(normalizedQuery)) {
-    score += 70;
+async function refreshSearchResults() {
+  if (!endpointLooksConfigured(endpoint.mangaGet)) {
+    state.searchResults = [];
+    renderSearchLibrary();
+    return;
   }
 
-  if (genres.some((genre) => genre === normalizedQuery)) {
-    score += 45;
-  } else if (genres.some((genre) => genre.includes(normalizedQuery))) {
-    score += 30;
-  }
+  const requestSeq = state.searchRequestSeq + 1;
+  state.searchRequestSeq = requestSeq;
+  state.searchLoading = true;
+  renderSearchLibrary();
 
-  if (category === normalizedQuery) {
-    score += 24;
-  } else if (category.includes(normalizedQuery)) {
-    score += 14;
-  }
+  try {
+    const url = new URL(endpoint.mangaGet);
+    const query = String(state.searchQuery || "").trim();
+    if (query) {
+      url.searchParams.set("query", query);
+    }
+    if (state.searchGenreId) {
+      url.searchParams.set("genre_id", state.searchGenreId);
+    }
+    if (state.searchCategoryId) {
+      url.searchParams.set("category_id", state.searchCategoryId);
+    }
+    if (state.searchFeatureId) {
+      url.searchParams.set("feature_category_id", state.searchFeatureId);
+    }
 
-  return score;
+    const response = await requestJson(url.toString(), { method: "GET" });
+    if (requestSeq !== state.searchRequestSeq) {
+      return;
+    }
+    const data = responseData(response);
+    const apiResults = (Array.isArray(data?.items) ? data.items : [])
+      .map(normalizeSearchMangaItem)
+      .filter(Boolean);
+    state.searchResults = sortSearchResults(apiResults);
+    state.searchLoading = false;
+    clearLibraryError();
+    renderSearchLibrary();
+  } catch (error) {
+    if (requestSeq !== state.searchRequestSeq) {
+      return;
+    }
+    state.searchResults = [];
+    state.searchLoading = false;
+    showLibraryError(`Could not load search results from API. ${error.message}`);
+    renderSearchLibrary();
+    console.error(error);
+  }
 }
 
-function itemPrimaryCategory(item) {
-  const categoryId = Array.isArray(item.groups) && item.groups.length ? item.groups[0] : "";
-  if (!categoryId) {
-    return "";
+function scheduleSearchRefresh(delayMs = 220) {
+  if (searchRefreshTimer) {
+    window.clearTimeout(searchRefreshTimer);
   }
-  const category = state.librarySections.find((section) => section.id === categoryId);
-  return category?.title || "";
-}
-
-function buildSearchFilteredItems() {
-  const normalizedQuery = toNormalizedLower(state.searchQuery);
-
-  return state.contentItems
-    .map((item) => {
-      const primaryCategory = itemPrimaryCategory(item);
-      const status = inferItemStatus(item);
-      const relevance = scoreItemRelevance(item, normalizedQuery, primaryCategory);
-      return { item, primaryCategory, status, relevance };
-    })
-    .filter(({ item, primaryCategory, status, relevance }) => {
-      const matchesQuery = !normalizedQuery || relevance > 0;
-      const matchesGenre = !state.searchGenre || item.genres.includes(state.searchGenre);
-      const matchesCategory = !state.searchCategory || primaryCategory === state.searchCategory;
-      const matchesStatus = !state.searchStatus || status === state.searchStatus;
-      return matchesQuery && matchesGenre && matchesCategory && matchesStatus;
-    })
-    .sort((left, right) => {
-      if (state.searchSort === "title_asc") {
-        return left.item.title.localeCompare(right.item.title);
-      }
-      if (state.searchSort === "title_desc") {
-        return right.item.title.localeCompare(left.item.title);
-      }
-      if (state.searchSort === "sequence_desc") {
-        const leftSeq = Number(left.item.sequenceNumber) || 0;
-        const rightSeq = Number(right.item.sequenceNumber) || 0;
-        if (leftSeq !== rightSeq) {
-          return rightSeq - leftSeq;
-        }
-        return left.item.title.localeCompare(right.item.title);
-      }
-      if (state.searchSort === "sequence_asc") {
-        const leftSeq = Number(left.item.sequenceNumber) || Number.MAX_SAFE_INTEGER;
-        const rightSeq = Number(right.item.sequenceNumber) || Number.MAX_SAFE_INTEGER;
-        if (leftSeq !== rightSeq) {
-          return leftSeq - rightSeq;
-        }
-        return left.item.title.localeCompare(right.item.title);
-      }
-      if (right.relevance !== left.relevance) {
-        return right.relevance - left.relevance;
-      }
-      return left.item.title.localeCompare(right.item.title);
-    });
+  searchRefreshTimer = window.setTimeout(() => {
+    searchRefreshTimer = 0;
+    void refreshSearchResults();
+  }, delayMs);
 }
 
 function populateSelectOptions(selectElement, options, activeValue = "") {
@@ -695,25 +737,23 @@ function renderSearchControls() {
     { value: "relevance", label: "Relevance" },
     { value: "title_asc", label: "Title A-Z" },
     { value: "title_desc", label: "Title Z-A" },
-    { value: "sequence_desc", label: "Newest Content" },
-    { value: "sequence_asc", label: "Oldest Content" },
   ];
   populateSelectOptions(elements.librarySortSelect, sortOptions, state.searchSort);
 
   const genreOptions = [{ value: "", label: "All Genres" }].concat(
-    state.availableGenres.map((genre) => ({ value: genre, label: genre }))
+    state.availableGenres.map((genre) => ({ value: genre.id, label: genre.name }))
   );
-  populateSelectOptions(elements.libraryGenreSelect, genreOptions, state.searchGenre);
+  populateSelectOptions(elements.libraryGenreSelect, genreOptions, state.searchGenreId);
 
   const categoryOptions = [{ value: "", label: "All Categories" }].concat(
-    state.librarySections.map((section) => ({ value: section.title, label: section.title }))
+    state.availableCategories.map((category) => ({ value: category.id, label: category.name }))
   );
-  populateSelectOptions(elements.libraryCategorySelect, categoryOptions, state.searchCategory);
+  populateSelectOptions(elements.libraryCategorySelect, categoryOptions, state.searchCategoryId);
 
-  const statusOptions = [{ value: "", label: "All" }].concat(
-    state.availableStatuses.map((status) => ({ value: status, label: status }))
+  const featureOptions = [{ value: "", label: "All Feature Sets" }].concat(
+    state.librarySections.map((section) => ({ value: section.id, label: section.title }))
   );
-  populateSelectOptions(elements.libraryStatusSelect, statusOptions, state.searchStatus);
+  populateSelectOptions(elements.libraryFeatureSelect, featureOptions, state.searchFeatureId);
 
   if (elements.librarySearchInput) {
     elements.librarySearchInput.value = state.searchQuery;
@@ -726,15 +766,15 @@ function renderSearchLibrary() {
   }
   elements.librarySearchResults.innerHTML = "";
 
-  if (!state.contentItems.length) {
-    elements.librarySearchResults.innerHTML = '<p class="library-empty">No manga available in feature categories.</p>';
+  if (state.searchLoading) {
+    elements.librarySearchResults.innerHTML = '<p class="library-empty">Loading search results...</p>';
     if (elements.librarySearchCount) {
-      elements.librarySearchCount.textContent = "0 results";
+      elements.librarySearchCount.textContent = "Loading...";
     }
     return;
   }
 
-  const matches = buildSearchFilteredItems();
+  const matches = Array.isArray(state.searchResults) ? state.searchResults : [];
   const searchTermLabel = String(state.searchQuery || "").trim();
   const countText = `${matches.length} result${matches.length === 1 ? "" : "s"}${searchTermLabel ? ` for "${searchTermLabel}"` : ""}`;
   if (elements.librarySearchCount) {
@@ -747,7 +787,7 @@ function renderSearchLibrary() {
   }
 
   const fragment = document.createDocumentFragment();
-  matches.forEach(({ item }) => {
+  matches.forEach((item) => {
     fragment.appendChild(createMangaCard(item));
   });
   elements.librarySearchResults.appendChild(fragment);
@@ -764,6 +804,7 @@ function setLibraryViewMode(mode) {
   if (inSearchMode) {
     renderSearchControls();
     renderSearchLibrary();
+    void refreshSearchResults();
     window.requestAnimationFrame(() => elements.librarySearchInput?.focus());
   } else {
     renderGroupedLibrary();
@@ -1480,7 +1521,7 @@ function wireEvents() {
       return;
     }
     state.searchQuery = target.value;
-    renderSearchLibrary();
+    scheduleSearchRefresh();
   });
 
   elements.librarySortSelect?.addEventListener("change", (event) => {
@@ -1497,8 +1538,8 @@ function wireEvents() {
     if (!(target instanceof HTMLSelectElement)) {
       return;
     }
-    state.searchGenre = target.value || "";
-    renderSearchLibrary();
+    state.searchGenreId = target.value || "";
+    scheduleSearchRefresh(80);
   });
 
   elements.libraryCategorySelect?.addEventListener("change", (event) => {
@@ -1506,17 +1547,17 @@ function wireEvents() {
     if (!(target instanceof HTMLSelectElement)) {
       return;
     }
-    state.searchCategory = target.value || "";
-    renderSearchLibrary();
+    state.searchCategoryId = target.value || "";
+    scheduleSearchRefresh(80);
   });
 
-  elements.libraryStatusSelect?.addEventListener("change", (event) => {
+  elements.libraryFeatureSelect?.addEventListener("change", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLSelectElement)) {
       return;
     }
-    state.searchStatus = target.value || "";
-    renderSearchLibrary();
+    state.searchFeatureId = target.value || "";
+    scheduleSearchRefresh(80);
   });
 
   state.eventsBound = true;

@@ -3,8 +3,8 @@ import logging
 from botocore.exceptions import ClientError
 
 from models.manga import MANGA_EDITABLE_FIELDS, normalize_manga_item
-from repositories import manga_repository
-from utils.api_gateway import get_param, http_method, parse_json_body, request_user_id
+from repositories import feature_category_item_repository, manga_repository
+from utils.api_gateway import get_param, http_method, parse_json_body, query_params, request_user_id
 from utils.responses import error, success
 from validators.manga_validator import validate_manga_put_payload
 from validators.manga_validator import (
@@ -16,6 +16,29 @@ LOG = logging.getLogger()
 LOG.setLevel(logging.INFO)
 
 
+def _parse_filter_ids(raw_value):
+    return [
+        value.strip()
+        for value in str(raw_value or "").split(",")
+        if value and value.strip()
+    ]
+
+
+def _feature_set_manga_ids(feature_category_ids):
+    wanted_feature_ids = [value for value in (feature_category_ids or []) if str(value).strip()]
+    if not wanted_feature_ids:
+        return None
+
+    manga_ids = set()
+    for category_id in wanted_feature_ids:
+        items = feature_category_item_repository.list_by_category_id(category_id)
+        for item in items:
+            manga_id = str(item.get("manga_id", "")).strip()
+            if manga_id:
+                manga_ids.add(manga_id)
+    return manga_ids
+
+
 def _handle_get(event):
     manga_id = get_param(event, "manga_id")
     if manga_id:
@@ -24,7 +47,41 @@ def _handle_get(event):
             return error(event, 404, "Manga not found.")
         return success(event, normalize_manga_item(item))
 
-    items = manga_repository.list_all()
+    params = query_params(event)
+    query = (
+        get_param(event, "query")
+        or get_param(event, "q")
+        or get_param(event, "title")
+    )
+    genre_ids = _parse_filter_ids(get_param(event, "genre_ids") or get_param(event, "genre_id"))
+    category_ids = _parse_filter_ids(
+        get_param(event, "category_ids") or get_param(event, "category_id")
+    )
+    feature_category_ids = _parse_filter_ids(
+        get_param(event, "feature_category_ids")
+        or get_param(event, "feature_category_id")
+        or get_param(event, "feature_set_ids")
+        or get_param(event, "feature_set_id")
+    )
+    has_filters = bool(
+        str(query or "").strip()
+        or genre_ids
+        or category_ids
+        or feature_category_ids
+        or (params and "q" in params)
+    )
+
+    if has_filters:
+        feature_manga_ids = _feature_set_manga_ids(feature_category_ids)
+        items = manga_repository.list_filtered(
+            query=query,
+            genre_ids=genre_ids,
+            category_ids=category_ids,
+            allowed_manga_ids=feature_manga_ids,
+        )
+    else:
+        items = manga_repository.list_all()
+
     normalized = [normalize_manga_item(item) for item in items]
     normalized.sort(key=lambda item: item.get("title", "").lower())
     return success(event, {"items": normalized, "count": len(normalized)})

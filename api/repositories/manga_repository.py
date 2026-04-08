@@ -44,6 +44,66 @@ def list_all(include_inactive=False):
     return items
 
 
+def _normalize_id_list(value):
+    if isinstance(value, list):
+        return {str(entry).strip() for entry in value if str(entry).strip()}
+    if value in (None, ""):
+        return set()
+    clean = str(value).strip()
+    return {clean} if clean else set()
+
+
+def _matches_query(item, query):
+    clean_query = str(query or "").strip().lower()
+    if not clean_query:
+        return True
+    title = str(item.get("title", "")).strip().lower()
+    japanese_title = str(item.get("japanese_title", "")).strip().lower()
+    series = str(item.get("series", "")).strip().lower()
+    return (
+        clean_query in title
+        or clean_query in japanese_title
+        or clean_query in series
+    )
+
+
+def list_filtered(
+    include_inactive=False,
+    query="",
+    genre_ids=None,
+    category_ids=None,
+    allowed_manga_ids=None,
+):
+    wanted_genres = {str(value).strip() for value in (genre_ids or []) if str(value).strip()}
+    wanted_categories = {str(value).strip() for value in (category_ids or []) if str(value).strip()}
+    allowed_ids = (
+        {str(value).strip() for value in (allowed_manga_ids or []) if str(value).strip()}
+        if allowed_manga_ids is not None
+        else None
+    )
+
+    filtered = []
+    for item in list_all(include_inactive=include_inactive):
+        manga_id = str(item.get("manga_id", "")).strip()
+        if allowed_ids is not None and manga_id not in allowed_ids:
+            continue
+
+        if not _matches_query(item, query):
+            continue
+
+        item_genres = _normalize_id_list(item.get("genre_ids"))
+        if wanted_genres and not item_genres.intersection(wanted_genres):
+            continue
+
+        item_categories = _normalize_id_list(item.get("category_ids"))
+        if wanted_categories and not item_categories.intersection(wanted_categories):
+            continue
+
+        filtered.append(item)
+
+    return filtered
+
+
 def update_existing(manga_id, attributes):
     if not attributes:
         raise ValueError("No editable fields were provided.")
