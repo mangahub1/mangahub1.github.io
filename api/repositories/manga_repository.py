@@ -58,10 +58,12 @@ def _matches_query(item, query):
     if not clean_query:
         return True
     title = str(item.get("title", "")).strip().lower()
+    publisher = str(item.get("publisher", "")).strip().lower()
     japanese_title = str(item.get("japanese_title", "")).strip().lower()
     series = str(item.get("series", "")).strip().lower()
     return (
         clean_query in title
+        or clean_query in publisher
         or clean_query in japanese_title
         or clean_query in series
     )

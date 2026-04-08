@@ -1,4 +1,4 @@
-import {
+﻿import {
   appAuthzConfig,
   appUploadConfig,
   mangaApiConfigLooksReady,
@@ -19,11 +19,13 @@ const state = {
   session: null,
   busy: false,
   mangaItems: [],
-  filteredMangaItems: [],
   categoryOptions: [],
   genreOptions: [],
   categoryNameById: new Map(),
   genreNameById: new Map(),
+  searchQuery: "",
+  searchGenreId: "",
+  searchCategoryId: "",
   contentItems: [],
   contentItemsByManga: new Map(),
   expandedMangaIds: new Set(),
@@ -51,6 +53,8 @@ const elements = {
   error: document.getElementById("adminError"),
   success: document.getElementById("adminSuccess"),
   searchInput: document.getElementById("searchInput"),
+  searchGenreInput: document.getElementById("searchGenreInput"),
+  searchCategoryInput: document.getElementById("searchCategoryInput"),
   refreshBtn: document.getElementById("refreshBtn"),
   addMangaBtn: document.getElementById("addMangaBtn"),
   adminGridShell: document.getElementById("adminGridShell"),
@@ -120,6 +124,9 @@ const elements = {
   contentFileClearBtn: document.getElementById("contentFileClearBtn"),
   contentFileCurrentUrl: document.getElementById("contentFileCurrentUrl"),
 };
+
+let searchRefreshTimer = 0;
+const SEARCH_INPUT_DEBOUNCE_MS = 1000;
 
 function redirectTo(path) {
   window.location.replace(path);
@@ -219,6 +226,20 @@ function renderLookupSelect(selectElement, items, placeholder) {
     : `<option value="" disabled>${escapeHtml(placeholder)}</option>`;
   selectElement.innerHTML = optionsMarkup;
   selectElement.disabled = !hasItems;
+}
+
+function renderSearchLookupSelect(selectElement, items, allLabel, selectedValue = "") {
+  if (!(selectElement instanceof HTMLSelectElement)) return;
+  const safeItems = Array.isArray(items) ? items : [];
+  const optionsMarkup =
+    `<option value="">${escapeHtml(allLabel)}</option>` +
+    safeItems
+      .map(
+        (item) =>
+          `<option value="${escapeHtml(item.id)}"${item.id === selectedValue ? " selected" : ""}>${escapeHtml(item.name || item.id)}</option>`
+      )
+      .join("");
+  selectElement.innerHTML = optionsMarkup;
 }
 
 function idsToLabel(ids, nameById) {
@@ -615,9 +636,12 @@ const endpoint = {
   },
 };
 
-function setBusy(nextBusy) {
+function setBusy(nextBusy, options = {}) {
+  const keepSearchEnabled = Boolean(options.keepSearchEnabled);
   state.busy = nextBusy;
-  elements.searchInput.disabled = nextBusy;
+  elements.searchInput.disabled = keepSearchEnabled ? false : nextBusy;
+  elements.searchGenreInput.disabled = keepSearchEnabled ? false : nextBusy;
+  elements.searchCategoryInput.disabled = keepSearchEnabled ? false : nextBusy;
   elements.refreshBtn.disabled = nextBusy;
   elements.addMangaBtn.disabled = nextBusy;
   elements.saveMangaBtn.disabled = nextBusy;
@@ -770,6 +794,12 @@ async function fetchCategoryList() {
   state.categoryOptions = normalized;
   state.categoryNameById = new Map(normalized.map((item) => [item.id, item.name]));
   renderLookupSelect(elements.categoryIdsInput, normalized, "No categories found");
+  renderSearchLookupSelect(
+    elements.searchCategoryInput,
+    normalized,
+    "All Categories",
+    state.searchCategoryId
+  );
 }
 
 async function fetchGenreList() {
@@ -786,6 +816,12 @@ async function fetchGenreList() {
   state.genreOptions = normalized;
   state.genreNameById = new Map(normalized.map((item) => [item.id, item.name]));
   renderLookupSelect(elements.genreIdsInput, normalized, "No genres found");
+  renderSearchLookupSelect(
+    elements.searchGenreInput,
+    normalized,
+    "All Genres",
+    state.searchGenreId
+  );
 }
 
 async function refreshTaxonomyOptions() {
@@ -809,7 +845,19 @@ function normalizeContent(item) {
 }
 
 async function fetchMangaList() {
-  const body = await requestJson(endpoint.mangaGet, {
+  const url = new URL(endpoint.mangaGet);
+  const query = String(state.searchQuery || "").trim();
+  if (query) {
+    url.searchParams.set("query", query);
+  }
+  if (state.searchGenreId) {
+    url.searchParams.set("genre_id", state.searchGenreId);
+  }
+  if (state.searchCategoryId) {
+    url.searchParams.set("category_id", state.searchCategoryId);
+  }
+
+  const body = await requestJson(url.toString(), {
     method: "GET",
     headers: { Authorization: `Bearer ${state.session.accessToken}` },
   });
@@ -818,28 +866,9 @@ async function fetchMangaList() {
   state.mangaItems = items.map(normalizeManga).sort((a, b) => a.title.localeCompare(b.title));
 }
 
-function applyMangaFilters() {
-  const search = String(elements.searchInput.value || "").trim().toLowerCase();
-  state.filteredMangaItems = state.mangaItems.filter((item) => {
-    if (!search) return true;
-    const haystack = [
-      item.manga_id,
-      item.title,
-      item.publisher,
-      item.series,
-      idsToLabel(item.category_ids, state.categoryNameById),
-      idsToLabel(item.genre_ids, state.genreNameById),
-    ]
-      .join(" ")
-      .toLowerCase();
-    return haystack.includes(search);
-  });
-  renderMangaGrid();
-}
-
 function renderMangaGrid() {
   elements.mangaTableBody.innerHTML = "";
-  if (!state.filteredMangaItems.length) {
+  if (!state.mangaItems.length) {
     const row = document.createElement("tr");
     row.innerHTML = '<td class="admin-grid-empty" colspan="7">No manga records found.</td>';
     elements.mangaTableBody.appendChild(row);
@@ -847,7 +876,7 @@ function renderMangaGrid() {
   }
 
   const fragment = document.createDocumentFragment();
-  state.filteredMangaItems.forEach((item) => {
+  state.mangaItems.forEach((item) => {
     const mangaId = String(item.manga_id || "").trim();
     const isActive = mangaId && state.expandedMangaIds.has(mangaId);
     const expandTitle = isActive ? "Collapse Content" : "Expand Content";
@@ -1338,11 +1367,30 @@ async function deleteContent(mangaId, contentKey) {
   }
 }
 
-async function refreshMangaGrid() {
+function syncSearchStateFromControls() {
+  state.searchQuery = String(elements.searchInput.value || "").trim();
+  state.searchGenreId = String(elements.searchGenreInput?.value || "").trim();
+  state.searchCategoryId = String(elements.searchCategoryInput?.value || "").trim();
+}
+
+function scheduleSearchRefresh(delayMs = SEARCH_INPUT_DEBOUNCE_MS) {
+  if (searchRefreshTimer) {
+    window.clearTimeout(searchRefreshTimer);
+  }
+  searchRefreshTimer = window.setTimeout(() => {
+    searchRefreshTimer = 0;
+    syncSearchStateFromControls();
+    void refreshMangaGrid({ refreshTaxonomy: false });
+  }, delayMs);
+}
+
+async function refreshMangaGrid({ refreshTaxonomy = false } = {}) {
   clearError();
-  setBusy(true);
+  setBusy(true, { keepSearchEnabled: true });
   try {
-    await refreshTaxonomyOptions();
+    if (refreshTaxonomy) {
+      await refreshTaxonomyOptions();
+    }
     await fetchMangaList();
     const validMangaIds = new Set(state.mangaItems.map((item) => item.manga_id));
     const nextExpanded = new Set(
@@ -1365,17 +1413,28 @@ async function refreshMangaGrid() {
         }
       })
     );
-    applyMangaFilters();
+    renderMangaGrid();
   } catch (error) {
     showError(error instanceof Error ? error.message : String(error));
   } finally {
-    setBusy(false);
+    setBusy(false, { keepSearchEnabled: true });
   }
 }
 
 function wireEvents() {
-  elements.searchInput.addEventListener("input", applyMangaFilters);
-  elements.refreshBtn.addEventListener("click", () => void refreshMangaGrid());
+  elements.searchInput.addEventListener("input", () => {
+    syncSearchStateFromControls();
+    scheduleSearchRefresh(SEARCH_INPUT_DEBOUNCE_MS);
+  });
+  elements.searchGenreInput.addEventListener("change", () => {
+    syncSearchStateFromControls();
+    scheduleSearchRefresh(80);
+  });
+  elements.searchCategoryInput.addEventListener("change", () => {
+    syncSearchStateFromControls();
+    scheduleSearchRefresh(80);
+  });
+  elements.refreshBtn.addEventListener("click", () => void refreshMangaGrid({ refreshTaxonomy: true }));
   elements.addMangaBtn.addEventListener("click", () => openMangaModal("create"));
 
   elements.mangaTableBody.addEventListener("click", (event) => {
@@ -1631,7 +1690,9 @@ async function init() {
 
   wireAccountIdentity();
   wireEvents();
-  await refreshMangaGrid();
+  syncSearchStateFromControls();
+  await refreshMangaGrid({ refreshTaxonomy: true });
 }
 
 void init();
+

@@ -41,7 +41,7 @@
 .admin-controls {
   margin-top: 1rem;
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) auto auto;
+  grid-template-columns: minmax(260px, 1fr) minmax(150px, 0.55fr) minmax(150px, 0.55fr) auto auto;
   gap: 0.7rem;
   align-items: end;
 }
@@ -51,6 +51,10 @@
   gap: 0.3rem;
 }
 
+.admin-control-search {
+  gap: 0;
+}
+
 .admin-control span {
   font-size: 0.8rem;
   font-weight: 600;
@@ -58,6 +62,15 @@
 }
 
 .admin-control input {
+  height: 2.35rem;
+  border: 1px solid #cfd6e2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 0.7rem;
+  font-size: 0.94rem;
+}
+
+.admin-control select {
   height: 2.35rem;
   border: 1px solid #cfd6e2;
   border-radius: 8px;

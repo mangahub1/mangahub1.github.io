@@ -12,6 +12,7 @@ const TAP_MAX_MOVE_PX = 12;
 const TAP_CLICK_DEDUP_MS = 420;
 const SWIPE_MIN_DISTANCE_PX = 48;
 const SWIPE_MAX_OFF_AXIS_PX = 72;
+const SEARCH_INPUT_DEBOUNCE_MS = 1000;
 
 function endpointLooksConfigured(value) {
   return String(value || "").trim().startsWith("https://");
@@ -706,7 +707,7 @@ async function refreshSearchResults() {
   }
 }
 
-function scheduleSearchRefresh(delayMs = 220) {
+function scheduleSearchRefresh(delayMs = SEARCH_INPUT_DEBOUNCE_MS) {
   if (searchRefreshTimer) {
     window.clearTimeout(searchRefreshTimer);
   }
@@ -1521,7 +1522,7 @@ function wireEvents() {
       return;
     }
     state.searchQuery = target.value;
-    scheduleSearchRefresh();
+    scheduleSearchRefresh(SEARCH_INPUT_DEBOUNCE_MS);
   });
 
   elements.librarySortSelect?.addEventListener("change", (event) => {
@@ -1818,6 +1819,7 @@ async function init() {
 }
 
 void init();
+
 
 
 

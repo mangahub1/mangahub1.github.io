@@ -57,8 +57,19 @@
 
     <section class="admin-controls">
       <label class="admin-control admin-control-search">
-        <span>Search</span>
-        <input id="searchInput" type="search" placeholder="Find by title, publisher, category, genre..." />
+        <input id="searchInput" type="search" placeholder="Search..." />
+      </label>
+      <label class="admin-control">
+        <span>Genre</span>
+        <select id="searchGenreInput">
+          <option value="">All Genres</option>
+        </select>
+      </label>
+      <label class="admin-control">
+        <span>Category</span>
+        <select id="searchCategoryInput">
+          <option value="">All Categories</option>
+        </select>
       </label>
       <button id="refreshBtn" type="button" class="admin-btn admin-btn-secondary refresh-icon-btn" title="Refresh" aria-label="Refresh">
         <svg viewBox="0 0 24 24" aria-hidden="true">
