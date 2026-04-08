@@ -560,6 +560,15 @@
   box-sizing: border-box;
 }
 
+.form-grid select[multiple] {
+  min-height: 120px;
+  padding: 0.4rem 0.45rem;
+}
+
+.form-grid select[multiple] option {
+  padding: 0.2rem 0.3rem;
+}
+
 #synopsisInput {
   height: 175px;
   resize: none;

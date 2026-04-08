@@ -16,6 +16,10 @@ export const appAuthzConfig = {
   getMangaUploadUrlEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/manga/upload-url",
   getMangaContentEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/manga-content",
   updateMangaContentEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/manga-content",
+  getCategoryEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/category",
+  updateCategoryEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/category",
+  getGenreEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/genre",
+  updateGenreEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/genre",
   getFeatureCategoryEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/feature-category",
   updateFeatureCategoryEndpoint:
     "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/feature-category",
@@ -90,6 +94,19 @@ export function mangaContentApiConfigLooksReady() {
 export function mangaContentUploadApiConfigLooksReady() {
   const uploadEndpoint = String(appAuthzConfig.getMangaContentUploadUrlEndpoint || "").trim();
   return uploadEndpoint.startsWith("https://");
+}
+
+export function mangaTaxonomyApiConfigLooksReady() {
+  const categoryGet = String(appAuthzConfig.getCategoryEndpoint || "").trim();
+  const categoryUpdate = String(appAuthzConfig.updateCategoryEndpoint || "").trim();
+  const genreGet = String(appAuthzConfig.getGenreEndpoint || "").trim();
+  const genreUpdate = String(appAuthzConfig.updateGenreEndpoint || "").trim();
+  return (
+    categoryGet.startsWith("https://") &&
+    categoryUpdate.startsWith("https://") &&
+    genreGet.startsWith("https://") &&
+    genreUpdate.startsWith("https://")
+  );
 }
 
 export function featureCategoryApiConfigLooksReady() {

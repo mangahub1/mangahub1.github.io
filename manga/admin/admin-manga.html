@@ -58,7 +58,7 @@
     <section class="admin-controls">
       <label class="admin-control admin-control-search">
         <span>Search</span>
-        <input id="searchInput" type="search" placeholder="Find by title, publisher, genre..." />
+        <input id="searchInput" type="search" placeholder="Find by title, publisher, category, genre..." />
       </label>
       <button id="refreshBtn" type="button" class="admin-btn admin-btn-secondary refresh-icon-btn" title="Refresh" aria-label="Refresh">
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -77,7 +77,8 @@
               <th class="col-expand">&nbsp;</th>
               <th class="col-cover">&nbsp;</th>
               <th>Title</th>
-              <th>Keywords</th>
+              <th>Category</th>
+              <th>Genre</th>
               <th>Publisher</th>
               <th class="col-action">&nbsp;</th>
             </tr>
@@ -146,7 +147,16 @@
             <label><span>Japanese Title</span><input id="japaneseTitleInput" name="japanese_title" type="text" /></label>
             <label><span>BISAC</span><input id="bisacInput" name="bisac" type="text" /></label>
             <label><span>Sales Restriction</span><input id="salesRestrictionInput" name="sales_restriction" type="text" /></label>
-            <label><span>Keywords (comma separated)</span><input id="keywordsInput" name="keywords" type="text" /></label>
+            <label>
+              <span>Category</span>
+              <select id="categoryIdsInput" name="category_ids" multiple aria-label="Category">
+              </select>
+            </label>
+            <label>
+              <span>Genre</span>
+              <select id="genreIdsInput" name="genre_ids" multiple aria-label="Genre">
+              </select>
+            </label>
             <label><span>Copyright</span><input id="copyrightInput" name="copyright" type="text" /></label>
           </section>
         </div>

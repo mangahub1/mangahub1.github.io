@@ -11,10 +11,15 @@ def validate_manga_post_payload(payload):
     if not title:
         errors.append("title is required.")
 
-    if "keywords" in payload:
-        keywords = payload.get("keywords")
-        if not isinstance(keywords, list) or any(not isinstance(value, str) for value in keywords):
-            errors.append("keywords must be a list of strings.")
+    if "category_ids" in payload:
+        category_ids = payload.get("category_ids")
+        if not isinstance(category_ids, list) or any(not isinstance(value, str) for value in category_ids):
+            errors.append("category_ids must be a list of strings.")
+
+    if "genre_ids" in payload:
+        genre_ids = payload.get("genre_ids")
+        if not isinstance(genre_ids, list) or any(not isinstance(value, str) for value in genre_ids):
+            errors.append("genre_ids must be a list of strings.")
 
     if "cover_url" in payload and not isinstance(payload.get("cover_url"), str):
         errors.append("cover_url must be a string.")
@@ -37,10 +42,15 @@ def validate_manga_put_payload(payload):
     if "title" in payload and not str(payload.get("title", "")).strip():
         errors.append("title must be non-empty when provided.")
 
-    if "keywords" in payload:
-        keywords = payload.get("keywords")
-        if not isinstance(keywords, list) or any(not isinstance(value, str) for value in keywords):
-            errors.append("keywords must be a list of strings.")
+    if "category_ids" in payload:
+        category_ids = payload.get("category_ids")
+        if not isinstance(category_ids, list) or any(not isinstance(value, str) for value in category_ids):
+            errors.append("category_ids must be a list of strings.")
+
+    if "genre_ids" in payload:
+        genre_ids = payload.get("genre_ids")
+        if not isinstance(genre_ids, list) or any(not isinstance(value, str) for value in genre_ids):
+            errors.append("genre_ids must be a list of strings.")
 
     if "cover_url" in payload and not isinstance(payload.get("cover_url"), str):
         errors.append("cover_url must be a string.")

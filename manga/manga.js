@@ -29,6 +29,9 @@ function endpointFromMangaBase(pathname) {
 
 const endpoint = {
   mangaGet: String(appAuthzConfig?.getMangaEndpoint || "").trim() || endpointFromMangaBase("/manga"),
+  categoryGet:
+    String(appAuthzConfig?.getCategoryEndpoint || "").trim() || endpointFromMangaBase("/category"),
+  genreGet: String(appAuthzConfig?.getGenreEndpoint || "").trim() || endpointFromMangaBase("/genre"),
   mangaContentGet:
     String(appAuthzConfig?.getMangaContentEndpoint || "").trim() ||
     endpointFromMangaBase("/manga-content"),
@@ -42,6 +45,7 @@ const elements = {
   mangaTitle: document.getElementById("mangaTitle"),
   mangaDescription: document.getElementById("mangaDescription"),
   metaAuthor: document.getElementById("metaAuthor"),
+  metaCategories: document.getElementById("metaCategories"),
   metaGenres: document.getElementById("metaGenres"),
   metaAge: document.getElementById("metaAge"),
   metaStatus: document.getElementById("metaStatus"),
@@ -155,11 +159,29 @@ function hideError() {
   elements.mangaError.classList.add("hidden");
 }
 
-function normalizeKeywords(keywords) {
-  if (!Array.isArray(keywords)) {
+function normalizeIdList(values) {
+  if (!Array.isArray(values)) {
     return [];
   }
-  return keywords.map((value) => String(value || "").trim()).filter(Boolean);
+  return values.map((value) => String(value || "").trim()).filter(Boolean);
+}
+
+function normalizeLookupItems(items, idKey) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => {
+      const id = String(item?.[idKey] || "").trim();
+      const name = String(item?.name || "").trim();
+      if (!id) return null;
+      return { id, name: name || id };
+    })
+    .filter(Boolean);
+}
+
+async function fetchLookupMap(url, idKey) {
+  const response = await requestJson(url, { method: "GET" });
+  const data = responseData(response);
+  const normalized = normalizeLookupItems(data?.items, idKey);
+  return new Map(normalized.map((item) => [item.id, item.name]));
 }
 
 function normalizeParagraphs(item) {
@@ -219,7 +241,10 @@ function normalizeParentManga(item) {
     description: String(item?.synopsis || "").trim(),
     ageRating: String(item?.age_rating || "").trim(),
     status: String(item?.is_active === false ? "Inactive" : "Ongoing").trim(),
-    genres: normalizeKeywords(item?.keywords),
+    categoryIds: normalizeIdList(item?.category_ids),
+    genreIds: normalizeIdList(item?.genre_ids),
+    categories: [],
+    genres: [],
     author: String(item?.publisher || "").trim(),
   };
 }
@@ -234,6 +259,7 @@ function buildReaderUrl(item, volume) {
 }
 
 function render(item) {
+  const categories = Array.isArray(item.categories) ? item.categories : [];
   const genres = Array.isArray(item.genres) ? item.genres : [];
   const paragraphs = normalizeParagraphs(item);
   const volumes = Array.isArray(item.volumes) ? item.volumes : [];
@@ -258,6 +284,14 @@ function render(item) {
   elements.metaAge.textContent = item.ageRating || "18+";
   elements.metaStatus.textContent = item.status || "Ongoing";
   elements.metaRating.textContent = "N/A";
+
+  elements.metaCategories.innerHTML = "";
+  (categories.length ? categories : ["Uncategorized"]).forEach((category) => {
+    const chip = document.createElement("span");
+    chip.className = "genre-chip";
+    chip.textContent = category;
+    elements.metaCategories.appendChild(chip);
+  });
 
   elements.metaGenres.innerHTML = "";
   (genres.length ? genres : ["Manga"]).forEach((genre) => {
@@ -322,11 +356,17 @@ function render(item) {
 async function loadMangaPageModel(mangaId) {
   const mangaUrl = new URL(endpoint.mangaGet);
   mangaUrl.searchParams.set("manga_id", mangaId);
-  const mangaResponse = await requestJson(mangaUrl.toString(), { method: "GET" });
+  const [mangaResponse, categoryNameById, genreNameById] = await Promise.all([
+    requestJson(mangaUrl.toString(), { method: "GET" }),
+    fetchLookupMap(endpoint.categoryGet, "category_id"),
+    fetchLookupMap(endpoint.genreGet, "genre_id"),
+  ]);
   const parent = normalizeParentManga(responseData(mangaResponse));
   if (!parent.id) {
     throw new Error(`Could not find manga id "${mangaId}".`);
   }
+  parent.categories = parent.categoryIds.map((id) => categoryNameById.get(id) || id);
+  parent.genres = parent.genreIds.map((id) => genreNameById.get(id) || id);
 
   const contentUrl = new URL(endpoint.mangaContentGet);
   contentUrl.searchParams.set("manga_id", mangaId);
@@ -357,6 +397,12 @@ async function init() {
   try {
     if (!endpointLooksConfigured(endpoint.mangaGet)) {
       throw new Error("Manga endpoint is not configured.");
+    }
+    if (!endpointLooksConfigured(endpoint.categoryGet)) {
+      throw new Error("Category endpoint is not configured.");
+    }
+    if (!endpointLooksConfigured(endpoint.genreGet)) {
+      throw new Error("Genre endpoint is not configured.");
     }
     if (!endpointLooksConfigured(endpoint.mangaContentGet)) {
       throw new Error("Manga content endpoint is not configured.");

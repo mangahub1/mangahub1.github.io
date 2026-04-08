@@ -1,9 +1,11 @@
 from utils.api_gateway import http_method
 from utils.responses import error
 
+from handlers.category_handler import lambda_handler as category_handler
 from handlers.feature_category_handler import lambda_handler as feature_category_handler
 from handlers.feature_category_item_handler import lambda_handler as feature_category_item_handler
 from handlers.get_users_handler import lambda_handler as get_users_handler
+from handlers.genre_handler import lambda_handler as genre_handler
 from handlers.manga_content_handler import lambda_handler as manga_content_handler
 from handlers.manga_content_upload_url_handler import (
     lambda_handler as manga_content_upload_url_handler,
@@ -47,6 +49,22 @@ ROUTES = {
     ("POST", "/create-feature-category-item"): feature_category_item_handler,
     ("PUT", "/update-feature-category-item"): feature_category_item_handler,
     ("DELETE", "/delete-feature-category-item"): feature_category_item_handler,
+    ("GET", "/category"): category_handler,
+    ("POST", "/category"): category_handler,
+    ("PUT", "/category"): category_handler,
+    ("DELETE", "/category"): category_handler,
+    ("GET", "/get-category"): category_handler,
+    ("POST", "/create-category"): category_handler,
+    ("PUT", "/update-category"): category_handler,
+    ("DELETE", "/delete-category"): category_handler,
+    ("GET", "/genre"): genre_handler,
+    ("POST", "/genre"): genre_handler,
+    ("PUT", "/genre"): genre_handler,
+    ("DELETE", "/genre"): genre_handler,
+    ("GET", "/get-genre"): genre_handler,
+    ("POST", "/create-genre"): genre_handler,
+    ("PUT", "/update-genre"): genre_handler,
+    ("DELETE", "/delete-genre"): genre_handler,
     ("GET", "/manga"): manga_handler,
     ("POST", "/manga"): manga_handler,
     ("PUT", "/manga"): manga_handler,
@@ -84,6 +102,16 @@ PATH_HANDLERS = {
     "/create-feature-category-item": feature_category_item_handler,
     "/update-feature-category-item": feature_category_item_handler,
     "/delete-feature-category-item": feature_category_item_handler,
+    "/category": category_handler,
+    "/get-category": category_handler,
+    "/create-category": category_handler,
+    "/update-category": category_handler,
+    "/delete-category": category_handler,
+    "/genre": genre_handler,
+    "/get-genre": genre_handler,
+    "/create-genre": genre_handler,
+    "/update-genre": genre_handler,
+    "/delete-genre": genre_handler,
     "/manga": manga_handler,
     "/get-manga": manga_handler,
     "/create-manga": manga_handler,

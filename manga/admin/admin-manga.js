@@ -4,6 +4,7 @@ import {
   mangaApiConfigLooksReady,
   mangaContentApiConfigLooksReady,
   mangaContentUploadApiConfigLooksReady,
+  mangaTaxonomyApiConfigLooksReady,
   mangaUploadApiConfigLooksReady,
 } from "../../auth/auth-config.js";
 import {
@@ -19,6 +20,10 @@ const state = {
   busy: false,
   mangaItems: [],
   filteredMangaItems: [],
+  categoryOptions: [],
+  genreOptions: [],
+  categoryNameById: new Map(),
+  genreNameById: new Map(),
   contentItems: [],
   contentItemsByManga: new Map(),
   expandedMangaIds: new Set(),
@@ -73,7 +78,8 @@ const elements = {
   coverImagePreview: document.getElementById("coverImagePreview"),
   coverImagePlaceholder: document.getElementById("coverImagePlaceholder"),
   coverImageCurrentUrl: document.getElementById("coverImageCurrentUrl"),
-  keywordsInput: document.getElementById("keywordsInput"),
+  categoryIdsInput: document.getElementById("categoryIdsInput"),
+  genreIdsInput: document.getElementById("genreIdsInput"),
   synopsisInput: document.getElementById("synopsisInput"),
   bisacInput: document.getElementById("bisacInput"),
   salesRestrictionInput: document.getElementById("salesRestrictionInput"),
@@ -172,6 +178,54 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function normalizeIdList(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry || "").trim()).filter(Boolean);
+  }
+  if (value === null || value === undefined || value === "") {
+    return [];
+  }
+  return [String(value).trim()].filter(Boolean);
+}
+
+function selectedOptionsAsIds(selectElement) {
+  if (!(selectElement instanceof HTMLSelectElement)) return [];
+  return Array.from(selectElement.selectedOptions)
+    .map((option) => String(option.value || "").trim())
+    .filter(Boolean);
+}
+
+function setMultiSelectValues(selectElement, values) {
+  if (!(selectElement instanceof HTMLSelectElement)) return;
+  const wanted = new Set(normalizeIdList(values));
+  Array.from(selectElement.options).forEach((option) => {
+    option.selected = wanted.has(option.value);
+  });
+}
+
+function renderLookupSelect(selectElement, items, placeholder) {
+  if (!(selectElement instanceof HTMLSelectElement)) return;
+  const safeItems = Array.isArray(items) ? items : [];
+  const hasItems = safeItems.length > 0;
+  const optionsMarkup = hasItems
+    ? safeItems
+        .map(
+          (item) =>
+            `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name || item.id)}</option>`
+        )
+        .join("")
+    : `<option value="" disabled>${escapeHtml(placeholder)}</option>`;
+  selectElement.innerHTML = optionsMarkup;
+  selectElement.disabled = !hasItems;
+}
+
+function idsToLabel(ids, nameById) {
+  const values = normalizeIdList(ids);
+  if (!values.length) return "-";
+  const labels = values.map((id) => nameById.get(id) || id);
+  return labels.join(", ");
 }
 
 function renderCoverThumb(url, label) {
@@ -538,6 +592,12 @@ const endpoint = {
   get mangaDelete() {
     return deriveEndpoint(this.mangaUpdate, [["/update-manga", "/delete-manga"], ["/manga", "/manga"]]);
   },
+  get categoryGet() {
+    return String(appAuthzConfig.getCategoryEndpoint || "").trim();
+  },
+  get genreGet() {
+    return String(appAuthzConfig.getGenreEndpoint || "").trim();
+  },
   get contentGet() {
     return String(appAuthzConfig.getMangaContentEndpoint || "").trim();
   },
@@ -644,7 +704,7 @@ function renderInlineContentRow(mangaId) {
           .join("");
 
   row.innerHTML = `
-    <td colspan="6">
+    <td colspan="7">
       <div class="content-inline-panel" role="region" aria-label="Content">
         <section class="drawer-controls">
           <button type="button" class="admin-btn" data-add-content-for="${escapeHtml(mangaId)}" title="Add New Manga Content" aria-label="Add New Manga Content">Add New</button>
@@ -684,8 +744,52 @@ function normalizeManga(item) {
     bisac: String(item?.bisac || "").trim(),
     sales_restriction: String(item?.sales_restriction || "").trim(),
     copyright: String(item?.copyright || "").trim(),
-    keywords: Array.isArray(item?.keywords) ? item.keywords.map((v) => String(v || "").trim()).filter(Boolean) : [],
+    category_ids: normalizeIdList(item?.category_ids),
+    genre_ids: normalizeIdList(item?.genre_ids),
   };
+}
+
+function normalizeLookupItem(item, idKey) {
+  const id = String(item?.[idKey] || "").trim();
+  const name = String(item?.name || "").trim();
+  if (!id) return null;
+  return { id, name: name || id };
+}
+
+async function fetchCategoryList() {
+  const body = await requestJson(endpoint.categoryGet, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${state.session.accessToken}` },
+  });
+  const data = responseData(body);
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const normalized = items
+    .map((item) => normalizeLookupItem(item, "category_id"))
+    .filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  state.categoryOptions = normalized;
+  state.categoryNameById = new Map(normalized.map((item) => [item.id, item.name]));
+  renderLookupSelect(elements.categoryIdsInput, normalized, "No categories found");
+}
+
+async function fetchGenreList() {
+  const body = await requestJson(endpoint.genreGet, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${state.session.accessToken}` },
+  });
+  const data = responseData(body);
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const normalized = items
+    .map((item) => normalizeLookupItem(item, "genre_id"))
+    .filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  state.genreOptions = normalized;
+  state.genreNameById = new Map(normalized.map((item) => [item.id, item.name]));
+  renderLookupSelect(elements.genreIdsInput, normalized, "No genres found");
+}
+
+async function refreshTaxonomyOptions() {
+  await Promise.all([fetchCategoryList(), fetchGenreList()]);
 }
 
 function normalizeContent(item) {
@@ -723,7 +827,8 @@ function applyMangaFilters() {
       item.title,
       item.publisher,
       item.series,
-      Array.isArray(item.keywords) ? item.keywords.join(" ") : "",
+      idsToLabel(item.category_ids, state.categoryNameById),
+      idsToLabel(item.genre_ids, state.genreNameById),
     ]
       .join(" ")
       .toLowerCase();
@@ -736,7 +841,7 @@ function renderMangaGrid() {
   elements.mangaTableBody.innerHTML = "";
   if (!state.filteredMangaItems.length) {
     const row = document.createElement("tr");
-    row.innerHTML = '<td class="admin-grid-empty" colspan="6">No manga records found.</td>';
+    row.innerHTML = '<td class="admin-grid-empty" colspan="7">No manga records found.</td>';
     elements.mangaTableBody.appendChild(row);
     return;
   }
@@ -765,7 +870,8 @@ function renderMangaGrid() {
       </td>
       <td class="col-cover-cell">${renderCoverThumb(item.cover_url, item.title)}</td>
       <td>${escapeHtml(item.title || "-")}</td>
-      <td>${escapeHtml(Array.isArray(item.keywords) && item.keywords.length ? item.keywords.join(", ") : "-")}</td>
+      <td>${escapeHtml(idsToLabel(item.category_ids, state.categoryNameById))}</td>
+      <td>${escapeHtml(idsToLabel(item.genre_ids, state.genreNameById))}</td>
       <td>${escapeHtml(item.publisher || "-")}</td>
       <td>
         <div class="row-actions">
@@ -805,7 +911,8 @@ function openMangaModal(mode, item = null) {
   elements.publisherInput.value = item?.publisher || "";
   elements.ageRatingInput.value = item?.age_rating || "";
   elements.japaneseTitleInput.value = item?.japanese_title || "";
-  elements.keywordsInput.value = Array.isArray(item?.keywords) ? item.keywords.join(", ") : "";
+  setMultiSelectValues(elements.categoryIdsInput, item?.category_ids);
+  setMultiSelectValues(elements.genreIdsInput, item?.genre_ids);
   elements.synopsisInput.value = item?.synopsis || "";
   elements.bisacInput.value = item?.bisac || "";
   elements.salesRestrictionInput.value = item?.sales_restriction || "";
@@ -827,10 +934,6 @@ function closeMangaModal() {
 
 function buildMangaPayload() {
   const mangaId = String(elements.mangaIdInput.value || "").trim();
-  const keywordList = String(elements.keywordsInput.value || "")
-    .split(",")
-    .map((v) => v.trim())
-    .filter(Boolean);
 
   return {
     manga_id: mangaId,
@@ -839,7 +942,8 @@ function buildMangaPayload() {
     age_rating: String(elements.ageRatingInput.value || "").trim(),
     japanese_title: String(elements.japaneseTitleInput.value || "").trim(),
     cover_url: String(state.editingManga?.cover_url || "").trim(),
-    keywords: keywordList,
+    category_ids: selectedOptionsAsIds(elements.categoryIdsInput),
+    genre_ids: selectedOptionsAsIds(elements.genreIdsInput),
     synopsis: String(elements.synopsisInput.value || "").trim(),
     bisac: String(elements.bisacInput.value || "").trim(),
     sales_restriction: String(elements.salesRestrictionInput.value || "").trim(),
@@ -1238,6 +1342,7 @@ async function refreshMangaGrid() {
   clearError();
   setBusy(true);
   try {
+    await refreshTaxonomyOptions();
     await fetchMangaList();
     const validMangaIds = new Set(state.mangaItems.map((item) => item.manga_id));
     const nextExpanded = new Set(
@@ -1517,6 +1622,10 @@ async function init() {
   }
   if (!mangaContentUploadApiConfigLooksReady()) {
     showError("Content upload URL endpoint is not configured in auth-config.js.");
+    return;
+  }
+  if (!mangaTaxonomyApiConfigLooksReady()) {
+    showError("Category and Genre API endpoints are not configured in auth-config.js.");
     return;
   }
 

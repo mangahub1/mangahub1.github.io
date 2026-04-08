@@ -4,7 +4,8 @@ MANGA_EDITABLE_FIELDS = [
     "series",
     "age_rating",
     "synopsis",
-    "keywords",
+    "category_ids",
+    "genre_ids",
     "copyright",
     "bisac",
     "sales_restriction",
@@ -44,12 +45,20 @@ def normalize_manga_item(item):
         "deleted_at": item.get("deleted_at"),
     }
 
-    keywords = item.get("keywords")
-    if isinstance(keywords, list):
-        normalized["keywords"] = [str(value).strip() for value in keywords if str(value).strip()]
-    elif keywords in (None, ""):
-        normalized["keywords"] = []
+    category_ids = item.get("category_ids")
+    if isinstance(category_ids, list):
+        normalized["category_ids"] = [str(value).strip() for value in category_ids if str(value).strip()]
+    elif category_ids in (None, ""):
+        normalized["category_ids"] = []
     else:
-        normalized["keywords"] = [str(keywords).strip()]
+        normalized["category_ids"] = [str(category_ids).strip()]
+
+    genre_ids = item.get("genre_ids")
+    if isinstance(genre_ids, list):
+        normalized["genre_ids"] = [str(value).strip() for value in genre_ids if str(value).strip()]
+    elif genre_ids in (None, ""):
+        normalized["genre_ids"] = []
+    else:
+        normalized["genre_ids"] = [str(genre_ids).strip()]
 
     return normalized
