@@ -3,7 +3,7 @@ import logging
 from botocore.exceptions import ClientError
 
 from models.manga import MANGA_EDITABLE_FIELDS, normalize_manga_item
-from repositories import feature_category_item_repository, manga_repository
+from repositories import feature_category_item_repository, manga_repository, user_library_repository
 from utils.api_gateway import get_param, http_method, parse_json_body, query_params, request_user_id
 from utils.responses import error, success
 from validators.manga_validator import validate_manga_put_payload
@@ -39,13 +39,46 @@ def _feature_set_manga_ids(feature_category_ids):
     return manga_ids
 
 
+def _to_bool(value):
+    return str(value or "").strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _intersect_allowed_sets(*allowed_sets):
+    intersected = None
+    for allowed in allowed_sets:
+        if allowed is None:
+            continue
+        clean = {str(value).strip() for value in allowed if str(value).strip()}
+        if intersected is None:
+            intersected = clean
+        else:
+            intersected = intersected.intersection(clean)
+    return intersected
+
+
+def _current_user_library_manga_ids(event):
+    user_id = request_user_id(event)
+    if not user_id:
+        return set()
+    return set(user_library_repository.list_manga_ids_for_user(user_id))
+
+
+def _with_user_library_flag(item, user_library_ids):
+    normalized = normalize_manga_item(item)
+    manga_id = str(normalized.get("manga_id", "")).strip()
+    normalized["in_user_library"] = manga_id in (user_library_ids or set())
+    return normalized
+
+
 def _handle_get(event):
+    user_library_ids = _current_user_library_manga_ids(event)
+
     manga_id = get_param(event, "manga_id")
     if manga_id:
         item = manga_repository.get_by_id(manga_id)
         if not item:
             return error(event, 404, "Manga not found.")
-        return success(event, normalize_manga_item(item))
+        return success(event, _with_user_library_flag(item, user_library_ids))
 
     params = query_params(event)
     query = (
@@ -63,26 +96,41 @@ def _handle_get(event):
         or get_param(event, "feature_set_ids")
         or get_param(event, "feature_set_id")
     )
+    library_only = _to_bool(
+        get_param(event, "user_library")
+        or get_param(event, "library_only")
+        or get_param(event, "my_library")
+    )
     has_filters = bool(
         str(query or "").strip()
         or genre_ids
         or category_ids
         or feature_category_ids
+        or library_only
         or (params and "q" in params)
     )
 
     if has_filters:
         feature_manga_ids = _feature_set_manga_ids(feature_category_ids)
+        library_manga_ids = None
+        if library_only:
+            user_id = request_user_id(event)
+            if not user_id:
+                return error(event, 401, "Unauthorized: user identity is required for user library.")
+            library_manga_ids = user_library_ids if user_library_ids else set(
+                user_library_repository.list_manga_ids_for_user(user_id)
+            )
+        allowed_manga_ids = _intersect_allowed_sets(feature_manga_ids, library_manga_ids)
         items = manga_repository.list_filtered(
             query=query,
             genre_ids=genre_ids,
             category_ids=category_ids,
-            allowed_manga_ids=feature_manga_ids,
+            allowed_manga_ids=allowed_manga_ids,
         )
     else:
         items = manga_repository.list_all()
 
-    normalized = [normalize_manga_item(item) for item in items]
+    normalized = [_with_user_library_flag(item, user_library_ids) for item in items]
     normalized.sort(key=lambda item: item.get("title", "").lower())
     return success(event, {"items": normalized, "count": len(normalized)})
 

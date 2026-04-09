@@ -12,6 +12,7 @@ from handlers.manga_content_upload_url_handler import (
 )
 from handlers.manga_handler import lambda_handler as manga_handler
 from handlers.manga_upload_url_handler import lambda_handler as manga_upload_url_handler
+from handlers.user_library_handler import lambda_handler as user_library_handler
 from handlers.users_handler import lambda_handler as users_handler
 from handlers.update_user_handler import lambda_handler as update_user_handler
 from handlers.validate_user_handler import lambda_handler as validate_user_handler
@@ -75,6 +76,12 @@ ROUTES = {
     ("DELETE", "/delete-manga"): manga_handler,
     ("POST", "/get-manga-upload-url"): manga_upload_url_handler,
     ("POST", "/manga/upload-url"): manga_upload_url_handler,
+    ("GET", "/user-library"): user_library_handler,
+    ("POST", "/user-library"): user_library_handler,
+    ("DELETE", "/user-library"): user_library_handler,
+    ("GET", "/my-library"): user_library_handler,
+    ("POST", "/my-library"): user_library_handler,
+    ("DELETE", "/my-library"): user_library_handler,
     ("GET", "/manga-content"): manga_content_handler,
     ("POST", "/manga-content"): manga_content_handler,
     ("PUT", "/manga-content"): manga_content_handler,
@@ -119,6 +126,8 @@ PATH_HANDLERS = {
     "/delete-manga": manga_handler,
     "/get-manga-upload-url": manga_upload_url_handler,
     "/manga/upload-url": manga_upload_url_handler,
+    "/user-library": user_library_handler,
+    "/my-library": user_library_handler,
     "/manga-content": manga_content_handler,
     "/get-manga-content": manga_content_handler,
     "/create-manga-content": manga_content_handler,

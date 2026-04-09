@@ -67,6 +67,9 @@ const state = {
   searchLoading: false,
   searchRequestSeq: 0,
   libraryViewMode: "home",
+  libraryScope: "catalog",
+  myLibraryItems: [],
+  myLibraryLoading: false,
   searchQuery: "",
   searchGenreId: "",
   searchCategoryId: "",
@@ -118,6 +121,8 @@ const elements = {
   libraryFeatureSelect: document.getElementById("libraryFeatureSelect"),
   librarySearchCount: document.getElementById("librarySearchCount"),
   librarySearchResults: document.getElementById("librarySearchResults"),
+  catalogNavLink: document.getElementById("catalogNavLink"),
+  myLibraryNavLink: document.getElementById("myLibraryNavLink"),
 };
 let searchRefreshTimer = 0;
 
@@ -427,6 +432,12 @@ function normalizeSearchMangaItem(item) {
   };
 }
 
+function syncTopNavState() {
+  const isMyLibrary = state.libraryScope === "my-library";
+  elements.catalogNavLink?.classList.toggle("is-active", !isMyLibrary);
+  elements.myLibraryNavLink?.classList.toggle("is-active", isMyLibrary);
+}
+
 async function loadContent() {
   try {
     if (!endpointLooksConfigured(endpoint.mangaGet)) {
@@ -642,6 +653,73 @@ function renderGroupedLibrary() {
   elements.libraryGrid.appendChild(fragment);
 }
 
+async function refreshMyLibrary() {
+  if (!endpointLooksConfigured(endpoint.mangaGet)) {
+    state.myLibraryItems = [];
+    state.myLibraryLoading = false;
+    renderLibrary();
+    return;
+  }
+  state.myLibraryLoading = true;
+  renderLibrary();
+  try {
+    const url = new URL(endpoint.mangaGet);
+    url.searchParams.set("user_library", "true");
+    const response = await requestJson(url.toString(), { method: "GET" });
+    const data = responseData(response);
+    const items = (Array.isArray(data?.items) ? data.items : [])
+      .map(normalizeSearchMangaItem)
+      .filter(Boolean)
+      .sort((a, b) => a.title.localeCompare(b.title));
+    state.myLibraryItems = items;
+    state.myLibraryLoading = false;
+    clearLibraryError();
+    renderLibrary();
+  } catch (error) {
+    state.myLibraryItems = [];
+    state.myLibraryLoading = false;
+    showLibraryError(`Could not load your library. ${error.message}`);
+    renderLibrary();
+  }
+}
+
+function renderMyLibrary() {
+  elements.libraryGrid.innerHTML = "";
+  if (state.myLibraryLoading) {
+    elements.libraryGrid.innerHTML = '<p class="library-empty">Loading your library...</p>';
+    return;
+  }
+
+  if (!state.myLibraryItems.length) {
+    elements.libraryGrid.innerHTML = '<p class="library-empty">Your library is empty. Add manga from a title page.</p>';
+    return;
+  }
+
+  const sectionWrap = document.createElement("section");
+  sectionWrap.className = "library-section";
+
+  const sectionHeader = document.createElement("div");
+  sectionHeader.className = "library-section-header";
+
+  const heading = document.createElement("h2");
+  heading.className = "library-section-title";
+  heading.textContent = "My Library";
+
+  const count = document.createElement("span");
+  count.className = "library-section-action";
+  count.textContent = `${state.myLibraryItems.length} title${state.myLibraryItems.length === 1 ? "" : "s"}`;
+
+  const row = document.createElement("div");
+  row.className = "library-row";
+  state.myLibraryItems.forEach((item) => {
+    row.appendChild(createMangaCard(item));
+  });
+
+  sectionHeader.append(heading, count);
+  sectionWrap.append(sectionHeader, row);
+  elements.libraryGrid.appendChild(sectionWrap);
+}
+
 function sortSearchResults(items) {
   const sorted = Array.isArray(items) ? [...items] : [];
   if (state.searchSort === "title_asc") {
@@ -795,12 +873,14 @@ function renderSearchLibrary() {
 }
 
 function setLibraryViewMode(mode) {
-  state.libraryViewMode = mode === "search" ? "search" : "home";
+  const requestedMode = mode === "search" ? "search" : "home";
+  state.libraryViewMode = state.libraryScope === "catalog" ? requestedMode : "home";
   const inSearchMode = state.libraryViewMode === "search";
   elements.librarySearchView?.classList.toggle("hidden", !inSearchMode);
   elements.libraryGrid?.classList.toggle("hidden", inSearchMode);
-  elements.openSearchView?.classList.toggle("hidden", inSearchMode);
-  elements.openHomeView?.classList.toggle("hidden", !inSearchMode);
+  const allowSearchMode = state.libraryScope === "catalog";
+  elements.openSearchView?.classList.toggle("hidden", inSearchMode || !allowSearchMode);
+  elements.openHomeView?.classList.toggle("hidden", !inSearchMode || !allowSearchMode);
 
   if (inSearchMode) {
     renderSearchControls();
@@ -812,7 +892,32 @@ function setLibraryViewMode(mode) {
   }
 }
 
+function setLibraryScope(scope, pushState = true) {
+  state.libraryScope = scope === "my-library" ? "my-library" : "catalog";
+  syncTopNavState();
+  if (state.libraryScope === "my-library") {
+    setLibraryViewMode("home");
+    void refreshMyLibrary();
+  } else {
+    renderLibrary();
+  }
+
+  if (pushState) {
+    const nextUrl = new URL(window.location.href);
+    if (state.libraryScope === "my-library") {
+      nextUrl.searchParams.set("view", "my-library");
+    } else {
+      nextUrl.searchParams.delete("view");
+    }
+    window.history.pushState({}, "", nextUrl);
+  }
+}
+
 function renderLibrary() {
+  if (state.libraryScope === "my-library") {
+    renderMyLibrary();
+    return;
+  }
   if (state.libraryViewMode === "search") {
     renderSearchControls();
     renderSearchLibrary();
@@ -1492,6 +1597,8 @@ function wireEvents() {
 
   window.addEventListener("popstate", () => {
     const params = new URLSearchParams(window.location.search);
+    const requestedView = String(params.get("view") || "").trim().toLowerCase();
+    setLibraryScope(requestedView === "my-library" ? "my-library" : "catalog", false);
     const mangaId = params.get("manga");
     const contentKey = String(params.get("content_key") || "").trim();
     const fallbackItem = buildQueryPreviewItem(params);
@@ -1514,6 +1621,16 @@ function wireEvents() {
 
   elements.openHomeView?.addEventListener("click", () => {
     setLibraryViewMode("home");
+  });
+
+  elements.catalogNavLink?.addEventListener("click", (event) => {
+    event.preventDefault();
+    setLibraryScope("catalog");
+  });
+
+  elements.myLibraryNavLink?.addEventListener("click", (event) => {
+    event.preventDefault();
+    setLibraryScope("my-library");
   });
 
   elements.librarySearchInput?.addEventListener("input", (event) => {
@@ -1790,10 +1907,17 @@ async function init() {
   wireAccountIdentity();
   wireEvents();
   await loadContent();
+  syncTopNavState();
   renderSearchControls();
   setLibraryViewMode("home");
 
   const params = new URLSearchParams(window.location.search);
+  const requestedView = String(params.get("view") || "").trim().toLowerCase();
+  if (requestedView === "my-library") {
+    setLibraryScope("my-library", false);
+  } else {
+    setLibraryScope("catalog", false);
+  }
   const mangaId = params.get("manga");
   const contentKey = String(params.get("content_key") || "").trim();
   const fallbackItem = buildQueryPreviewItem(params);

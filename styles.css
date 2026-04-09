@@ -86,6 +86,10 @@ body {
   font-weight: 500;
 }
 
+.library-nav-links a.is-active {
+  color: #0d9ec9;
+}
+
 .library-nav-right {
   display: inline-flex;
   align-items: center;

@@ -29,6 +29,7 @@ export const appAuthzConfig = {
     "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/feature-category-item",
   getMangaContentUploadUrlEndpoint:
     "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/manga-content/upload-url",
+  userLibraryEndpoint: "https://jzijf1gjj8.execute-api.us-east-1.amazonaws.com/user-library",
 };
 
 export const appUploadConfig = {

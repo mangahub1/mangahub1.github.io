@@ -293,6 +293,7 @@ api/
 
 - `MANGA_TABLE_NAME=Manga`
 - `MANGA_CONTENT_TABLE_NAME=MangaContent`
+- `USER_LIBRARY_TABLE_NAME=UserLibrary`
 - `CONTENT_BUCKET=blupetal-prototype`
 - `UPLOAD_URL_TTL_SECONDS=900`
 - `CONTENT_PUBLIC_BASE_URL=https://cdn.example.com` (optional)
@@ -324,6 +325,9 @@ Supported route map in the router:
 - `PUT /update-user`
 - `GET /manga`
 - `PUT /manga`
+- `GET /user-library`
+- `POST /user-library`
+- `DELETE /user-library`
 - `GET /get-manga` (legacy alias)
 - `PUT /update-manga` (legacy alias)
 - `POST /get-manga-upload-url`

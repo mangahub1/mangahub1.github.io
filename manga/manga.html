@@ -15,6 +15,7 @@
       </a>
       <nav class="topbar-nav" aria-label="Primary">
         <a href="../library.html">Manga</a>
+        <a href="../library.html?view=my-library">My Library</a>
         <a href="#">News</a>
         <a href="#">Shop</a>
       </nav>
@@ -76,47 +77,82 @@
     <section id="mangaError" class="manga-error hidden" role="alert"></section>
 
     <section id="mangaLayout" class="manga-layout hidden">
-      <aside class="manga-left">
-        <img id="mangaCover" class="manga-cover" src="" alt="" />
-        <div class="manga-actions">
-          <a class="back-library-btn" href="../library.html">Back to Library</a>
-          <a id="startReadingBtn" class="start-reading-btn" href="../library.html">Start Reading</a>
+      <section class="manga-hero">
+        <div class="manga-hero-cover-wrap">
+          <img id="mangaCover" class="manga-cover" src="" alt="" />
+          <div class="pro-included-badge">Included in BluPetal Pro</div>
         </div>
-        <section class="meta-card">
-          <div class="meta-row">
-            <h3>Author</h3>
-            <p id="metaAuthor">Unknown</p>
-          </div>
-          <div class="meta-row">
-            <h3>Category</h3>
-            <div id="metaCategories" class="genre-chips"></div>
-          </div>
-          <div class="meta-row">
-            <h3>Genre</h3>
-            <div id="metaGenres" class="genre-chips"></div>
-          </div>
-          <div class="meta-row">
-            <h3>Age Rating</h3>
-            <p id="metaAge">18+</p>
-          </div>
-          <div class="meta-row">
-            <h3>Status</h3>
-            <p id="metaStatus">Ongoing</p>
-          </div>
-          <div class="meta-row">
-            <h3>Rating</h3>
-            <p id="metaRating">4.8</p>
-          </div>
-        </section>
-      </aside>
+        <div class="manga-hero-main">
+          <nav class="manga-breadcrumb" aria-label="Breadcrumb">
+            <a href="../library.html">Manga</a>
+            <span>/</span>
+            <span id="breadcrumbTitle">Manga Title</span>
+          </nav>
+          <div id="metaCategories" class="genre-chips"></div>
+          <h1 id="mangaTitle" class="manga-title">Manga Title</h1>
+          <p id="heroMetaLine" class="hero-meta-line">By Unknown</p>
 
-      <section class="manga-right">
-        <h1 id="mangaTitle" class="manga-title">Manga Title</h1>
-        <div id="mangaDescription" class="manga-description"></div>
+          <div class="hero-scoreline">
+            <span class="hero-stars" aria-hidden="true">★ ★ ★ ★ ★</span>
+            <span id="metaRating" class="hero-rating">N/A</span>
+          </div>
+
+          <div id="metaGenres" class="genre-chips"></div>
+
+          <div class="hero-stats">
+            <div class="hero-stat">
+              <div id="metaVolumeCount" class="hero-stat-value">0</div>
+              <div class="hero-stat-label">Volumes</div>
+            </div>
+            <div class="hero-stat">
+              <div id="metaStatus" class="hero-stat-value">Ongoing</div>
+              <div class="hero-stat-label">Status</div>
+            </div>
+            <div class="hero-stat">
+              <div id="metaAge" class="hero-stat-value">18+</div>
+              <div class="hero-stat-label">Rating</div>
+            </div>
+            <div class="hero-stat">
+              <div id="metaAuthor" class="hero-stat-value">Unknown</div>
+              <div class="hero-stat-label">Publisher</div>
+            </div>
+          </div>
+
+          <section class="manga-synopsis">
+            <h2>Synopsis</h2>
+            <div id="mangaDescription" class="manga-description"></div>
+          </section>
+
+          <div class="manga-actions">
+            <a id="startReadingBtn" class="start-reading-btn" href="../library.html">Read Now</a>
+            <button id="addLibraryBtn" type="button" class="add-library-btn">Add to Library</button>
+            <div class="reading-progress" aria-label="Reading progress">
+              <div class="reading-progress-label">
+                <span>Your progress</span>
+                <strong id="readingProgressText">Vol. 0 of 0 • 0%</strong>
+              </div>
+              <div class="reading-progress-track" role="presentation">
+                <div id="readingProgressFill" class="reading-progress-fill"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="manga-volumes">
         <div class="volume-head">
           <h2>Volumes</h2>
+          <span id="volumeCountLabel" class="volume-count-label">0 Volumes</span>
         </div>
         <div id="volumeList" class="volume-list"></div>
+      </section>
+
+      <section id="moreLikeThisSection" class="more-like-this hidden" aria-label="More like this">
+        <div class="more-like-head">
+          <h2>More Like This</h2>
+          <a href="../library.html">See All</a>
+        </div>
+        <div id="moreLikeList" class="more-like-list"></div>
       </section>
     </section>
   </main>
