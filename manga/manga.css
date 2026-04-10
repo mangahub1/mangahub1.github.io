@@ -236,7 +236,7 @@ body {
 
 .manga-hero {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 240px minmax(0, 1fr);
   gap: 1.3rem;
   padding: 1.2rem;
 }
@@ -256,6 +256,9 @@ body {
 }
 
 .pro-included-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   justify-self: center;
   margin-top: 0.56rem;
   border: 1px solid #9dd8ee;
@@ -301,9 +304,24 @@ body {
 }
 
 .hero-stars {
-  color: #f7b731;
+  position: relative;
+  display: inline-block;
   font-size: 0.84rem;
   letter-spacing: 0.05em;
+  line-height: 1;
+}
+
+.hero-stars-base {
+  color: #d4dce6;
+}
+
+.hero-stars-fill {
+  position: absolute;
+  inset: 0 auto auto 0;
+  white-space: nowrap;
+  overflow: hidden;
+  width: var(--star-fill-pct, 100%);
+  color: #f7b731;
 }
 
 .hero-rating {
@@ -454,7 +472,7 @@ body {
 .manga-actions {
   margin-top: 0.9rem;
   display: flex;
-  align-items: end;
+  align-items: center;
   flex-wrap: nowrap;
   gap: 10px;
 }
@@ -553,17 +571,17 @@ body {
   border: 1px solid #dce4ed;
   background: #fcfdff;
   border-radius: 10px;
-  padding: 0.5rem;
+  padding: 0.38rem 0.5rem;
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) auto;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.62rem;
 }
 
 .volume-cover {
-  width: 46px;
-  height: 62px;
-  border-radius: 7px;
+  width: 38px;
+  height: 52px;
+  border-radius: 5px;
   object-fit: cover;
   border: 1px solid #d5dce6;
   background: #eceff4;
@@ -574,16 +592,17 @@ body {
 }
 
 .volume-label {
-  font-size: 0.9rem;
+  font-size: 0.76rem;
   color: #2a3340;
   font-weight: 600;
+  line-height: 1.25;
 }
 
 .volume-date,
 .volume-synopsis {
-  margin-top: 0.15rem;
+  margin-top: 0.08rem;
   color: #8492a4;
-  font-size: 0.76rem;
+  font-size: 0.64rem;
 }
 
 .volume-synopsis {
@@ -597,13 +616,13 @@ body {
   text-decoration: none;
   align-items: center;
   justify-content: center;
-  min-width: 112px;
-  padding: 0.46rem 0.68rem;
+  min-width: 104px;
+  padding: 0.36rem 0.6rem;
   border-radius: 999px;
   border: 1px solid #d4deea;
   background: #ffffff;
   color: #6e7a8d;
-  font-size: 0.74rem;
+  font-size: 0.66rem;
   font-weight: 600;
 }
 
@@ -688,7 +707,7 @@ body {
   }
 
   .manga-hero-cover-wrap {
-    max-width: 260px;
+    max-width: 220px;
   }
 
   .hero-stats {
@@ -696,8 +715,8 @@ body {
   }
 
   .manga-actions {
-    grid-template-columns: 1fr;
-    align-items: stretch;
+    flex-wrap: wrap;
+    align-items: center;
   }
 
   .volume-item {

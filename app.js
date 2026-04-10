@@ -12,7 +12,6 @@ const TAP_MAX_MOVE_PX = 12;
 const TAP_CLICK_DEDUP_MS = 420;
 const SWIPE_MIN_DISTANCE_PX = 48;
 const SWIPE_MAX_OFF_AXIS_PX = 72;
-const SEARCH_INPUT_DEBOUNCE_MS = 1000;
 
 function endpointLooksConfigured(value) {
   return String(value || "").trim().startsWith("https://");
@@ -71,10 +70,16 @@ const state = {
   myLibraryItems: [],
   myLibraryLoading: false,
   searchQuery: "",
-  searchGenreId: "",
-  searchCategoryId: "",
-  searchFeatureId: "",
+  searchGenreIds: [],
+  searchCategoryIds: [],
+  searchAgeRatings: [],
+  searchReviewThresholds: [],
+  searchStatuses: [],
   searchSort: "relevance",
+  searchViewLayout: "grid",
+  searchPage: 1,
+  searchPageSize: 18,
+  searchContentType: "manga",
   activeItem: null,
   eventsBound: false,
   awaitingFirstRender: false,
@@ -114,17 +119,22 @@ const elements = {
   openSearchView: document.getElementById("openSearchView"),
   openHomeView: document.getElementById("openHomeView"),
   librarySearchView: document.getElementById("librarySearchView"),
-  librarySearchInput: document.getElementById("librarySearchInput"),
+  librarySearchTitle: document.getElementById("librarySearchTitle"),
   librarySortSelect: document.getElementById("librarySortSelect"),
-  libraryGenreSelect: document.getElementById("libraryGenreSelect"),
-  libraryCategorySelect: document.getElementById("libraryCategorySelect"),
-  libraryFeatureSelect: document.getElementById("libraryFeatureSelect"),
+  libraryFilterPills: document.getElementById("libraryFilterPills"),
+  libraryResetFilters: document.getElementById("libraryResetFilters"),
+  libraryGridViewBtn: document.getElementById("libraryGridViewBtn"),
+  libraryListViewBtn: document.getElementById("libraryListViewBtn"),
   librarySearchCount: document.getElementById("librarySearchCount"),
+  librarySearchMetaCount: document.getElementById("librarySearchMetaCount"),
   librarySearchResults: document.getElementById("librarySearchResults"),
+  librarySearchPager: document.getElementById("librarySearchPager"),
+  librarySearchPrevPage: document.getElementById("librarySearchPrevPage"),
+  librarySearchNextPage: document.getElementById("librarySearchNextPage"),
+  librarySearchPageNumbers: document.getElementById("librarySearchPageNumbers"),
   catalogNavLink: document.getElementById("catalogNavLink"),
   myLibraryNavLink: document.getElementById("myLibraryNavLink"),
 };
-let searchRefreshTimer = 0;
 
 function syncAppViewportHeight() {
   const viewportHeight =
@@ -421,6 +431,12 @@ function normalizeSearchMangaItem(item) {
   if (!mangaId || !title) {
     return null;
   }
+  const rawStatus = String(item?.status || "").trim();
+  const rawAgeRating = String(item?.age_rating || item?.age_rating_label || "").trim();
+  const parsedReview = Number(item?.review ?? item?.rating ?? item?.star_rating);
+  const reviewScore = Number.isFinite(parsedReview) && parsedReview >= 0
+    ? Math.min(5, parsedReview)
+    : null;
   return {
     id: mangaId,
     mangaId,
@@ -429,7 +445,55 @@ function normalizeSearchMangaItem(item) {
     cover: String(item?.cover_url || "").trim() || FALLBACK_COVER,
     categoryIds: normalizeIdList(item?.category_ids),
     genreIds: normalizeIdList(item?.genre_ids),
+    status: rawStatus || inferItemStatus(item),
+    ageRating: rawAgeRating,
+    reviewScore,
+    author: String(item?.author || item?.creator || "").trim(),
+    publisher: String(item?.publisher || item?.studio || item?.imprint || "").trim(),
+    volumeLabel: buildSearchVolumeLabel(item),
   };
+}
+
+function buildSearchVolumeLabel(item) {
+  const explicit = String(item?.volume_label || item?.volume_range || "").trim();
+  if (explicit) {
+    return explicit;
+  }
+  const single = Number(item?.volume ?? item?.volume_number ?? item?.vol);
+  if (Number.isFinite(single) && single > 0) {
+    return `Vol ${single}`;
+  }
+
+  const start = Number(item?.volume_start ?? item?.start_volume ?? item?.first_volume);
+  const end = Number(
+    item?.volume_end ?? item?.end_volume ?? item?.last_volume ?? item?.volume_count ?? item?.total_volumes
+  );
+  if (Number.isFinite(start) && start > 0 && Number.isFinite(end) && end >= start) {
+    return start === end ? `Vol ${start}` : `Vol ${start}-${end}`;
+  }
+  if (Number.isFinite(end) && end > 0) {
+    return `Vol 1-${end}`;
+  }
+  const volumes = Array.isArray(item?.volumes) ? item.volumes : [];
+  if (volumes.length) {
+    const numbers = volumes
+      .map((entry) =>
+        Number(
+          typeof entry === "object" && entry
+            ? entry.volume ?? entry.number ?? entry.sequence_number
+            : entry
+        )
+      )
+      .filter((value) => Number.isFinite(value) && value > 0)
+      .sort((a, b) => a - b);
+    if (numbers.length) {
+      const first = numbers[0];
+      const last = numbers[numbers.length - 1];
+      return first === last ? `Vol ${first}` : `Vol ${first}-${last}`;
+    }
+    return `Vol 1-${volumes.length}`;
+  }
+  return "";
 }
 
 function syncTopNavState() {
@@ -529,10 +593,60 @@ async function loadContent() {
   }
 }
 
-function createMangaCard(item) {
+function buildSearchResultMetaLabel(item) {
+  const parts = [];
+  const author = String(item?.author || "").trim();
+  if (author) {
+    parts.push(author);
+  }
+  const status = String(item?.status || "").trim();
+  if (status) {
+    parts.push(status);
+  }
+  const stars = Number(item?.reviewScore);
+  if (Number.isFinite(stars) && stars > 0) {
+    parts.push(`${stars.toFixed(1)}★`);
+  }
+  return parts.join(" · ") || "Series";
+}
+
+function buildSearchResultPublisherLabel(item) {
+  const publisher = String(item?.publisher || "").trim();
+  if (publisher) {
+    return publisher;
+  }
+  const fallback = String(item?.author || "").trim();
+  return fallback || "";
+}
+
+function buildSearchResultVolumeStatusLabel(item) {
+  return "Vol 1-8 • Ongoing";
+}
+
+function buildSearchGenreBadges(item) {
+  const fallbackGenres = Array.isArray(item?.genres)
+    ? item.genres.map((entry) => String(entry || "").trim()).filter(Boolean)
+    : [];
+  const mappedGenreNames = (Array.isArray(item?.genreIds) ? item.genreIds : [])
+    .map((genreId) => {
+      const match = state.availableGenres.find((genre) => genre.id === genreId);
+      return String(match?.name || "").trim();
+    })
+    .filter(Boolean);
+  const genreNames = mappedGenreNames.length ? mappedGenreNames : fallbackGenres;
+  return genreNames.slice(0, 4);
+}
+
+function createMangaCard(item, options = {}) {
   const card = document.createElement("button");
   card.type = "button";
   card.className = "manga-card";
+  if (options.context === "search") {
+    card.classList.add("manga-card--search");
+    if (options.viewLayout === "list") {
+      card.classList.add("manga-card--list");
+    }
+  }
   card.setAttribute("data-manga-id", item.id);
   card.setAttribute("aria-label", `Open ${item.title}`);
 
@@ -553,9 +667,44 @@ function createMangaCard(item) {
 
   const meta = document.createElement("span");
   meta.className = "manga-meta";
-  meta.textContent = buildLibraryItemMetaLabel(item);
+  const isSearchManga =
+    options.context === "search" && String(item?.itemType || "").toUpperCase() === "MANGA";
+  if (isSearchManga) {
+    const body = document.createElement("span");
+    body.className = "manga-card-body";
 
-  card.append(cover, title, meta);
+    const publisher = document.createElement("span");
+    publisher.className = "manga-publisher";
+    publisher.textContent = buildSearchResultPublisherLabel(item);
+
+    const volumeStatus = document.createElement("span");
+    volumeStatus.className = "manga-submeta";
+    volumeStatus.textContent = buildSearchResultVolumeStatusLabel(item);
+
+    const genreWrap = document.createElement("span");
+    genreWrap.className = "manga-genre-list";
+    buildSearchGenreBadges(item).forEach((genreName, index) => {
+      const badge = document.createElement("span");
+      badge.className = `manga-genre-chip tone-${index % 4}`;
+      badge.textContent = genreName;
+      genreWrap.appendChild(badge);
+    });
+
+    card.append(cover, body);
+    body.appendChild(title);
+    if (publisher.textContent) {
+      body.appendChild(publisher);
+    }
+    if (volumeStatus.textContent) {
+      body.appendChild(volumeStatus);
+    }
+    if (genreWrap.childElementCount) {
+      body.appendChild(genreWrap);
+    }
+  } else {
+    meta.textContent = buildLibraryItemMetaLabel(item);
+    card.append(cover, title, meta);
+  }
   card.addEventListener("click", () => {
     const itemType = String(item.itemType || "").trim().toUpperCase();
     if (itemType === "MANGA_CONTENT") {
@@ -630,11 +779,14 @@ function renderGroupedLibrary() {
     sectionAction.className = "library-section-action";
     sectionAction.textContent = "See All >";
     sectionAction.addEventListener("click", () => {
-      state.searchFeatureId = section.id === "all" ? "" : section.id;
       state.searchQuery = "";
-      state.searchGenreId = "";
-      state.searchCategoryId = "";
+      state.searchGenreIds = [];
+      state.searchCategoryIds = [];
+      state.searchAgeRatings = [];
+      state.searchReviewThresholds = [];
+      state.searchStatuses = [];
       state.searchSort = "relevance";
+      state.searchPage = 1;
       setLibraryViewMode("search");
     });
 
@@ -751,15 +903,6 @@ async function refreshSearchResults() {
     if (query) {
       url.searchParams.set("query", query);
     }
-    if (state.searchGenreId) {
-      url.searchParams.set("genre_id", state.searchGenreId);
-    }
-    if (state.searchCategoryId) {
-      url.searchParams.set("category_id", state.searchCategoryId);
-    }
-    if (state.searchFeatureId) {
-      url.searchParams.set("feature_category_id", state.searchFeatureId);
-    }
 
     const response = await requestJson(url.toString(), { method: "GET" });
     if (requestSeq !== state.searchRequestSeq) {
@@ -769,7 +912,7 @@ async function refreshSearchResults() {
     const apiResults = (Array.isArray(data?.items) ? data.items : [])
       .map(normalizeSearchMangaItem)
       .filter(Boolean);
-    state.searchResults = sortSearchResults(apiResults);
+    state.searchResults = apiResults;
     state.searchLoading = false;
     clearLibraryError();
     renderSearchLibrary();
@@ -783,16 +926,6 @@ async function refreshSearchResults() {
     renderSearchLibrary();
     console.error(error);
   }
-}
-
-function scheduleSearchRefresh(delayMs = SEARCH_INPUT_DEBOUNCE_MS) {
-  if (searchRefreshTimer) {
-    window.clearTimeout(searchRefreshTimer);
-  }
-  searchRefreshTimer = window.setTimeout(() => {
-    searchRefreshTimer = 0;
-    void refreshSearchResults();
-  }, delayMs);
 }
 
 function populateSelectOptions(selectElement, options, activeValue = "") {
@@ -811,31 +944,335 @@ function populateSelectOptions(selectElement, options, activeValue = "") {
   });
 }
 
+function getSearchFilterDefs() {
+  return [
+    {
+      key: "genre",
+      title: "Genre",
+      selectedValues: state.searchGenreIds,
+      options: state.availableGenres.map((item) => ({ value: item.id, label: item.name })),
+    },
+    {
+      key: "category",
+      title: "Category",
+      selectedValues: state.searchCategoryIds,
+      options: state.availableCategories.map((item) => ({ value: item.id, label: item.name })),
+    },
+    {
+      key: "age",
+      title: "Age Rating",
+      selectedValues: state.searchAgeRatings,
+      options: [
+        { value: "everyone", label: "Everyone" },
+        { value: "teen", label: "Teen" },
+        { value: "mature", label: "Mature" },
+      ],
+    },
+    {
+      key: "status",
+      title: "Status",
+      selectedValues: state.searchStatuses,
+      options: [
+        { value: "ongoing", label: "Ongoing" },
+        { value: "completed", label: "Completed" },
+        { value: "hiatus", label: "Hiatus" },
+      ],
+    },
+    {
+      key: "review",
+      title: "Review",
+      selectedValues: state.searchReviewThresholds,
+      options: [
+        { value: "5", label: "5★ & up" },
+        { value: "4", label: "4★ & up" },
+        { value: "3", label: "3★ & up" },
+        { value: "2", label: "2★ & up" },
+      ],
+    },
+  ];
+}
+
+function setFilterSelectedValues(key, values) {
+  const normalized = Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
+  if (key === "genre") {
+    state.searchGenreIds = normalized;
+  } else if (key === "category") {
+    state.searchCategoryIds = normalized;
+  } else if (key === "age") {
+    state.searchAgeRatings = normalized;
+  } else if (key === "status") {
+    state.searchStatuses = normalized;
+  } else if (key === "review") {
+    state.searchReviewThresholds = normalized;
+  }
+}
+
+function selectedFilterSummary(filterDef) {
+  return filterDef.options.filter((option) => filterDef.selectedValues.includes(option.value));
+}
+
+function getFilterDraftValues(detailsElement, fallbackValues = []) {
+  const raw = String(detailsElement?.dataset?.draftValues || "").trim();
+  if (!raw) {
+    return [...fallbackValues];
+  }
+  return raw.split("|").map((value) => String(value || "").trim()).filter(Boolean);
+}
+
+function setFilterDraftValues(detailsElement, values) {
+  if (!(detailsElement instanceof HTMLElement)) {
+    return;
+  }
+  detailsElement.dataset.draftValues = values.join("|");
+}
+
+function applyFilterValues(key, values) {
+  setFilterSelectedValues(key, values);
+  state.searchPage = 1;
+  renderSearchControls();
+  renderSearchLibrary();
+}
+
+function renderSearchFilterPills() {
+  const host = elements.libraryFilterPills;
+  if (!host) {
+    return;
+  }
+  host.innerHTML = "";
+  const fragment = document.createDocumentFragment();
+  getSearchFilterDefs().forEach((filterDef) => {
+    const details = document.createElement("details");
+    details.className = "library-filter-pill";
+    details.dataset.filterKey = filterDef.key;
+
+    const summary = document.createElement("summary");
+    summary.className = "library-filter-pill-trigger";
+    const title = document.createElement("span");
+    title.className = "filter-title";
+    title.textContent = `${filterDef.title}`;
+    summary.appendChild(title);
+
+    const selected = selectedFilterSummary(filterDef);
+    if (selected.length) {
+      summary.classList.add("has-value");
+      const valuesWrap = document.createElement("span");
+      valuesWrap.className = "filter-selected-values";
+      selected.forEach((option) => {
+        const token = document.createElement("span");
+        token.className = "filter-selected-token";
+        const text = document.createElement("span");
+        text.textContent = option.label;
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "filter-selected-remove";
+        remove.textContent = "x";
+        remove.setAttribute("aria-label", `Remove ${option.label}`);
+        remove.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const nextValues = filterDef.selectedValues.filter((value) => value !== option.value);
+          applyFilterValues(filterDef.key, nextValues);
+        });
+        token.append(text, remove);
+        valuesWrap.appendChild(token);
+      });
+      summary.appendChild(valuesWrap);
+    }
+    details.appendChild(summary);
+
+    const menu = document.createElement("div");
+    menu.className = "library-filter-menu";
+    filterDef.options.forEach((option) => {
+      const label = document.createElement("label");
+      label.className = "library-filter-option";
+      const input = document.createElement("input");
+      input.type = filterDef.key === "review" ? "radio" : "checkbox";
+      if (filterDef.key === "review") {
+        input.name = `filter-${filterDef.key}`;
+      }
+      input.value = option.value;
+      input.checked = filterDef.selectedValues.includes(option.value);
+      input.addEventListener("change", () => {
+        if (filterDef.key === "review") {
+          setFilterDraftValues(details, input.checked ? [option.value] : []);
+          return;
+        }
+        const draftValues = getFilterDraftValues(details, filterDef.selectedValues);
+        const next = input.checked
+          ? draftValues.concat(option.value)
+          : draftValues.filter((value) => value !== option.value);
+        setFilterDraftValues(details, Array.from(new Set(next)));
+      });
+      const text = document.createElement("span");
+      text.textContent = option.label;
+      label.append(input, text);
+      menu.appendChild(label);
+    });
+
+    const actions = document.createElement("div");
+    actions.className = "library-filter-menu-actions";
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "library-filter-clear-btn";
+    clear.textContent = "Clear";
+    clear.addEventListener("click", (event) => {
+      event.preventDefault();
+      setFilterDraftValues(details, []);
+      menu.querySelectorAll('input[type="checkbox"]').forEach((entry) => {
+        if (entry instanceof HTMLInputElement) {
+          entry.checked = false;
+        }
+      });
+    });
+    const search = document.createElement("button");
+    search.type = "button";
+    search.className = "library-filter-apply-btn";
+    search.textContent = "Search";
+    search.addEventListener("click", (event) => {
+      event.preventDefault();
+      const draftValues = getFilterDraftValues(details, filterDef.selectedValues);
+      applyFilterValues(filterDef.key, draftValues);
+      details.open = false;
+    });
+    actions.append(clear, search);
+    menu.appendChild(actions);
+
+    details.addEventListener("toggle", () => {
+      if (details.open) {
+        setFilterDraftValues(details, [...filterDef.selectedValues]);
+        return;
+      }
+      const draftValues = getFilterDraftValues(details, filterDef.selectedValues);
+      const currentValues = [...filterDef.selectedValues];
+      const isSame =
+        draftValues.length === currentValues.length &&
+        draftValues.every((value) => currentValues.includes(value));
+      if (!isSame) {
+        applyFilterValues(filterDef.key, draftValues);
+      }
+    });
+
+    details.appendChild(menu);
+    fragment.appendChild(details);
+  });
+  host.appendChild(fragment);
+}
+
 function renderSearchControls() {
+  const contentTypeLabels = {
+    manga: "Manga",
+  };
+  const activeContentType = String(state.searchContentType || "manga").trim().toLowerCase();
+  const contentLabel = contentTypeLabels[activeContentType] || "Content";
+  if (elements.librarySearchTitle) {
+    elements.librarySearchTitle.textContent = contentLabel;
+  }
+
   const sortOptions = [
     { value: "relevance", label: "Relevance" },
     { value: "title_asc", label: "Title A-Z" },
     { value: "title_desc", label: "Title Z-A" },
   ];
   populateSelectOptions(elements.librarySortSelect, sortOptions, state.searchSort);
+  renderSearchFilterPills();
+}
 
-  const genreOptions = [{ value: "", label: "All Genres" }].concat(
-    state.availableGenres.map((genre) => ({ value: genre.id, label: genre.name }))
-  );
-  populateSelectOptions(elements.libraryGenreSelect, genreOptions, state.searchGenreId);
+function filterSearchResults(items) {
+  return items.filter((item) => {
+    if (state.searchGenreIds.length) {
+      const genres = Array.isArray(item?.genreIds) ? item.genreIds : [];
+      if (!state.searchGenreIds.some((value) => genres.includes(value))) {
+        return false;
+      }
+    }
 
-  const categoryOptions = [{ value: "", label: "All Categories" }].concat(
-    state.availableCategories.map((category) => ({ value: category.id, label: category.name }))
-  );
-  populateSelectOptions(elements.libraryCategorySelect, categoryOptions, state.searchCategoryId);
+    if (state.searchCategoryIds.length) {
+      const categories = Array.isArray(item?.categoryIds) ? item.categoryIds : [];
+      if (!state.searchCategoryIds.some((value) => categories.includes(value))) {
+        return false;
+      }
+    }
 
-  const featureOptions = [{ value: "", label: "All Feature Sets" }].concat(
-    state.librarySections.map((section) => ({ value: section.id, label: section.title }))
-  );
-  populateSelectOptions(elements.libraryFeatureSelect, featureOptions, state.searchFeatureId);
+    if (state.searchAgeRatings.length) {
+      const itemAgeRating = String(item?.ageRating || "").trim().toLowerCase();
+      if (!state.searchAgeRatings.some((value) => itemAgeRating.includes(String(value).toLowerCase()))) {
+        return false;
+      }
+    }
 
-  if (elements.librarySearchInput) {
-    elements.librarySearchInput.value = state.searchQuery;
+    if (state.searchStatuses.length) {
+      const itemStatus = String(item?.status || "").trim().toLowerCase();
+      if (!state.searchStatuses.some((value) => itemStatus.includes(String(value).toLowerCase()))) {
+        return false;
+      }
+    }
+
+    if (state.searchReviewThresholds.length) {
+      const reviewScore = Number(item?.reviewScore);
+      const thresholds = state.searchReviewThresholds
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value) && value > 0);
+      const passesAny = thresholds.some((threshold) => Number.isFinite(reviewScore) && reviewScore >= threshold);
+      if (!passesAny) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
+function setSearchViewLayout(layout) {
+  state.searchViewLayout = layout === "list" ? "list" : "grid";
+  const isList = state.searchViewLayout === "list";
+  elements.libraryGridViewBtn?.classList.toggle("is-active", !isList);
+  elements.libraryListViewBtn?.classList.toggle("is-active", isList);
+  elements.libraryGridViewBtn?.setAttribute("aria-pressed", isList ? "false" : "true");
+  elements.libraryListViewBtn?.setAttribute("aria-pressed", isList ? "true" : "false");
+}
+
+function renderSearchPager(totalResults) {
+  if (!elements.librarySearchPager) {
+    return;
+  }
+  const totalPages = Math.max(1, Math.ceil(totalResults / state.searchPageSize));
+  state.searchPage = Math.min(Math.max(1, state.searchPage), totalPages);
+
+  const prevDisabled = state.searchPage <= 1;
+  const nextDisabled = state.searchPage >= totalPages;
+  if (elements.librarySearchPrevPage) {
+    elements.librarySearchPrevPage.disabled = prevDisabled;
+  }
+  if (elements.librarySearchNextPage) {
+    elements.librarySearchNextPage.disabled = nextDisabled;
+  }
+
+  if (!elements.librarySearchPageNumbers) {
+    return;
+  }
+  elements.librarySearchPageNumbers.innerHTML = "";
+  if (totalResults === 0) {
+    elements.librarySearchPager.classList.add("hidden");
+    return;
+  }
+  elements.librarySearchPager.classList.remove("hidden");
+
+  const pageRangeStart = Math.max(1, state.searchPage - 2);
+  const pageRangeEnd = Math.min(totalPages, state.searchPage + 2);
+  for (let page = pageRangeStart; page <= pageRangeEnd; page += 1) {
+    const pageBtn = document.createElement("button");
+    pageBtn.type = "button";
+    pageBtn.className = "search-page-number";
+    if (page === state.searchPage) {
+      pageBtn.classList.add("is-active");
+      pageBtn.setAttribute("aria-current", "page");
+    }
+    pageBtn.textContent = String(page);
+    pageBtn.addEventListener("click", () => {
+      state.searchPage = page;
+      renderSearchLibrary();
+    });
+    elements.librarySearchPageNumbers.appendChild(pageBtn);
   }
 }
 
@@ -844,32 +1281,51 @@ function renderSearchLibrary() {
     return;
   }
   elements.librarySearchResults.innerHTML = "";
+  setSearchViewLayout(state.searchViewLayout);
+  elements.librarySearchResults.classList.toggle("library-results-list", state.searchViewLayout === "list");
+  elements.librarySearchResults.classList.toggle("library-results-grid", state.searchViewLayout !== "list");
 
   if (state.searchLoading) {
     elements.librarySearchResults.innerHTML = '<p class="library-empty">Loading search results...</p>';
     if (elements.librarySearchCount) {
-      elements.librarySearchCount.textContent = "Loading...";
+      elements.librarySearchCount.textContent = "Loading titles...";
     }
+    if (elements.librarySearchMetaCount) {
+      elements.librarySearchMetaCount.textContent = "Loading...";
+    }
+    elements.librarySearchPager?.classList.add("hidden");
     return;
   }
 
-  const matches = Array.isArray(state.searchResults) ? state.searchResults : [];
-  const searchTermLabel = String(state.searchQuery || "").trim();
-  const countText = `${matches.length} result${matches.length === 1 ? "" : "s"}${searchTermLabel ? ` for "${searchTermLabel}"` : ""}`;
+  const sorted = sortSearchResults(Array.isArray(state.searchResults) ? state.searchResults : []);
+  const matches = filterSearchResults(sorted);
+  const countText = `${matches.length} title${matches.length === 1 ? "" : "s"}`;
   if (elements.librarySearchCount) {
     elements.librarySearchCount.textContent = countText;
+  }
+  if (elements.librarySearchMetaCount) {
+    elements.librarySearchMetaCount.textContent = `${matches.length} results`;
   }
 
   if (!matches.length) {
     elements.librarySearchResults.innerHTML = '<p class="library-empty">No matches found. Try different filters.</p>';
+    elements.librarySearchPager?.classList.add("hidden");
     return;
   }
 
+  const totalPages = Math.max(1, Math.ceil(matches.length / state.searchPageSize));
+  state.searchPage = Math.min(Math.max(1, state.searchPage), totalPages);
+  const startIndex = (state.searchPage - 1) * state.searchPageSize;
+  const visibleMatches = matches.slice(startIndex, startIndex + state.searchPageSize);
+
   const fragment = document.createDocumentFragment();
-  matches.forEach((item) => {
-    fragment.appendChild(createMangaCard(item));
+  visibleMatches.forEach((item) => {
+    fragment.appendChild(
+      createMangaCard(item, { context: "search", viewLayout: state.searchViewLayout })
+    );
   });
   elements.librarySearchResults.appendChild(fragment);
+  renderSearchPager(matches.length);
 }
 
 function setLibraryViewMode(mode) {
@@ -886,7 +1342,6 @@ function setLibraryViewMode(mode) {
     renderSearchControls();
     renderSearchLibrary();
     void refreshSearchResults();
-    window.requestAnimationFrame(() => elements.librarySearchInput?.focus());
   } else {
     renderGroupedLibrary();
   }
@@ -1633,49 +2088,60 @@ function wireEvents() {
     setLibraryScope("my-library");
   });
 
-  elements.librarySearchInput?.addEventListener("input", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement)) {
-      return;
-    }
-    state.searchQuery = target.value;
-    scheduleSearchRefresh(SEARCH_INPUT_DEBOUNCE_MS);
-  });
-
   elements.librarySortSelect?.addEventListener("change", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLSelectElement)) {
       return;
     }
     state.searchSort = target.value || "relevance";
+    state.searchPage = 1;
     renderSearchLibrary();
   });
 
-  elements.libraryGenreSelect?.addEventListener("change", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLSelectElement)) {
-      return;
-    }
-    state.searchGenreId = target.value || "";
-    scheduleSearchRefresh(80);
+  elements.libraryResetFilters?.addEventListener("click", () => {
+    state.searchQuery = "";
+    state.searchGenreIds = [];
+    state.searchCategoryIds = [];
+    state.searchAgeRatings = [];
+    state.searchReviewThresholds = [];
+    state.searchStatuses = [];
+    state.searchSort = "relevance";
+    state.searchPage = 1;
+    renderSearchControls();
+    renderSearchLibrary();
   });
 
-  elements.libraryCategorySelect?.addEventListener("change", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLSelectElement)) {
-      return;
-    }
-    state.searchCategoryId = target.value || "";
-    scheduleSearchRefresh(80);
+  elements.libraryGridViewBtn?.addEventListener("click", () => {
+    setSearchViewLayout("grid");
+    renderSearchLibrary();
   });
 
-  elements.libraryFeatureSelect?.addEventListener("change", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLSelectElement)) {
-      return;
-    }
-    state.searchFeatureId = target.value || "";
-    scheduleSearchRefresh(80);
+  elements.libraryListViewBtn?.addEventListener("click", () => {
+    setSearchViewLayout("list");
+    renderSearchLibrary();
+  });
+
+  elements.librarySearchPrevPage?.addEventListener("click", () => {
+    state.searchPage = Math.max(1, state.searchPage - 1);
+    renderSearchLibrary();
+  });
+
+  elements.librarySearchNextPage?.addEventListener("click", () => {
+    state.searchPage += 1;
+    renderSearchLibrary();
+  });
+
+  document.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    document.querySelectorAll(".library-filter-pill[open]").forEach((entry) => {
+      if (!(entry instanceof HTMLDetailsElement)) {
+        return;
+      }
+      if (!target || entry.contains(target)) {
+        return;
+      }
+      entry.open = false;
+    });
   });
 
   state.eventsBound = true;

@@ -53,6 +53,7 @@ const elements = {
   metaAge: document.getElementById("metaAge"),
   metaStatus: document.getElementById("metaStatus"),
   metaRating: document.getElementById("metaRating"),
+  heroStars: document.getElementById("heroStars"),
   metaVolumeCount: document.getElementById("metaVolumeCount"),
   volumeCountLabel: document.getElementById("volumeCountLabel"),
   volumeList: document.getElementById("volumeList"),
@@ -254,6 +255,16 @@ function formatVolumeTitle(contentItem, index) {
   return `Volume ${index + 1}`;
 }
 
+function formatVolumeRowLabel(volume, index) {
+  const sequenceNumber = Number(volume?.sequenceNumber);
+  const volumeNumber = Number.isFinite(sequenceNumber) && sequenceNumber > 0 ? sequenceNumber : index + 1;
+  const rawTitle = String(volume?.title || "").trim();
+  const cleanedTitle = rawTitle
+    .replace(/^(vol(?:ume)?|chapter)\.?\s*\d+\s*[:\-]?\s*/i, "")
+    .trim();
+  return cleanedTitle ? `Vol. ${volumeNumber} ${cleanedTitle}` : `Vol. ${volumeNumber}`;
+}
+
 function normalizeVolumes(parent, contentItems) {
   const normalized = (Array.isArray(contentItems) ? contentItems : [])
     .map((contentItem, index) => ({
@@ -394,7 +405,13 @@ function render(item) {
   elements.metaAuthor.textContent = item.author || "Unknown";
   elements.metaAge.textContent = item.ageRating || "18+";
   elements.metaStatus.textContent = toTitleCase(item.status || "Ongoing");
-  elements.metaRating.textContent = "N/A";
+  const mockedRating = 4.0;
+  elements.metaRating.textContent = mockedRating.toFixed(1);
+  if (elements.heroStars) {
+    const clamped = Math.max(0, Math.min(5, mockedRating));
+    const fillPercent = (clamped / 5) * 100;
+    elements.heroStars.style.setProperty("--star-fill-pct", `${fillPercent}%`);
+  }
   elements.metaVolumeCount.textContent = String(volumes.length || 0);
   elements.volumeCountLabel.textContent = `${volumes.length || 0} Volumes`;
   elements.heroMetaLine.textContent = `By ${authorText}`;
@@ -506,7 +523,7 @@ function render(item) {
       textWrap.className = "volume-text";
       const title = document.createElement("div");
       title.className = "volume-label";
-      title.textContent = volume.title;
+      title.textContent = formatVolumeRowLabel(volume, index);
       const date = document.createElement("div");
       date.className = "volume-date";
       if (Number.isFinite(volume.pageCount) && volume.pageCount > 0) {
@@ -514,10 +531,7 @@ function render(item) {
       } else {
         date.textContent = volume.date || "Available";
       }
-      const synopsis = document.createElement("p");
-      synopsis.className = "volume-synopsis";
-      synopsis.textContent = volume.synopsis || "Synopsis coming soon.";
-      textWrap.append(title, date, synopsis);
+      textWrap.append(title, date);
 
       const action = document.createElement("a");
       action.className = "volume-action";
